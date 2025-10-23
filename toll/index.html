@@ -1,0 +1,24 @@
+!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>リクエストtester</title>
+</head>
+<body>
+<h1>Fetchリクエストてすたー</h1>
+<input type="text" id="urlInput" placeholder="URLを入力" />
+<input type="text" id="tokenInput" placeholder="Authorizationトークンを入力" />
+<textarea id="bodyInput" placeholder="リクエストボディを入力"></textarea>
+<select id="methodSelect">
+    <option value="GET">GET</option>
+    <option value="POST">POST</option>
+    <option value="PUT">PUT</option>
+    <option value="DELETE">DELETE</option>
+</select>
+<button id="sendRequest">リクエストを送信</button>
+<pre id="responseOutput"></pre>
+    
+<script src="script.js"></script>
+</body>
+</html>
