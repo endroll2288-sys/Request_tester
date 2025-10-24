@@ -9,6 +9,7 @@ document.getElementById('sendRequest').addEventListener('click', async () => {
             method: method,
             headers: {
                 'Content-Type': 'application/json',
+                 'Authorization': `Bearer ${token}`, 
             },
             body: method === 'GET' ? null : body ? JSON.stringify(body) : undefined,
         });
