@@ -5,6 +5,7 @@ document.getElementById('sendRequest').addEventListener('click', async () => {
     const token = document.getElementById('tokenInput').value;
 
     try {
+        console.log(`${token} and ${body}`)
         const response = await fetch(url, {
             method: method,
             headers: {
