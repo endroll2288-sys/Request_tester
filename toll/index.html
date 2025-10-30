@@ -3,28 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>リクエストtester</title>
+    <title>リクエストテスター</title>
 </head>
 <body>
-<h1>Fetchリクエストてすたー</h1>
-<input type="text" id="urlInput" placeholder="URLを入力" />
-    <br>
-<input type="text" id="tokenInput" placeholder="Authorizationトークンを入力" />
-    <br>
-<input type="text" id="x-csrf-tokenInput" placeholder="x-csrf-tokenトークンを入力" />
-   <br>
-<textarea id="bodyInput" placeholder="リクエストボディを入力"></textarea>
-    <br>
-<select id="methodSelect">
-    <option value="GET">GET</option>
-    <option value="POST">POST</option>
-    <option value="PUT">PUT</option>
-    <option value="DELETE">DELETE</option>
-</select>
-    <br>
-<button id="sendRequest">リクエストを送信</button>
-<pre id="responseOutput"></pre>
+    <h1>リクエストテスター</h1>
+    <input type="text" id="urlInput" placeholder="URLを入力" />
+    <input type="text" id="tokenInput" placeholder="Authorizationトークンを入力" />
+    <textarea id="bodyInput" placeholder="リクエストボディを入力"></textarea>
+
+    <h3>ヘッダー設定</h3>
+    <div id="headerFields">
+        <input type="text" class="header-key" placeholder="ヘッダー名" />
+        <input type="text" class="header-value" placeholder="ヘッダー値" />
+    </div>
+    <button id="addHeader">ヘッダーを追加</button>
     
-<script src="script.js"></script>
+    <select id="methodSelect">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+        <option value="PUT">PUT</option>
+        <option value="DELETE">DELETE</option>
+    </select>
+    <button id="sendRequest">リクエストを送信</button>
+    
+    <pre id="responseOutput"></pre>
+    
+    <script src="script.js"></script>
 </body>
 </html>
