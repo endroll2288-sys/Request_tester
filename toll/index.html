@@ -3,31 +3,250 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>リクエストテスター</title>
+    <title>HTTP Request Tester</title>
+    <style>
+        :root {
+            --bg-color: #f4f6f8;
+            --card-bg: #ffffff;
+            --primary: #007bff;
+            --text: #333;
+            --border: #ddd;
+            --code-bg: #2d2d2d;
+            --code-text: #f8f8f2;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1 { margin-top: 0; font-size: 1.5rem; border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+        h2 { font-size: 1.1rem; margin-top: 20px; margin-bottom: 5px; }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        input[type="text"], select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+
+        select { width: 120px; flex-shrink: 0; }
+        
+        textarea {
+            font-family: "Consolas", "Monaco", monospace;
+            min-height: 100px;
+            resize: vertical;
+            font-size: 0.9rem;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+            width: 100%;
+            font-weight: bold;
+        }
+
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        .response-area {
+            margin-top: 30px;
+            border-top: 2px dashed var(--border);
+            padding-top: 20px;
+        }
+
+        .status-bar {
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: none;
+        }
+        .status-success { background-color: #d4edda; color: #155724; }
+        .status-error { background-color: #f8d7da; color: #721c24; }
+
+        pre {
+            background-color: var(--code-bg);
+            color: var(--code-text);
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            margin: 0;
+            font-size: 0.9rem;
+        }
+
+        .label-note { font-size: 0.8rem; color: #666; font-weight: normal; margin-left: 5px; }
+    </style>
 </head>
 <body>
-    <h1>リクエストテスター</h1>
-    <input type="text" id="urlInput" placeholder="URLを入力" />
-    <input type="text" id="tokenInput" placeholder="Authorizationトークンを入力" />
-    <textarea id="bodyInput" placeholder="リクエストボディを入力"></textarea>
 
-    <h3>ヘッダー設定</h3>
-    <div id="headerFields">
-        <input type="text" class="header-key" placeholder="ヘッダー名" />
-        <input type="text" class="header-value" placeholder="ヘッダー値" />
+<div class="container">
+    <h1>HTTP Request Tester</h1>
+
+    <div class="input-group">
+        <select id="method">
+            <option value="GET">GET</option>
+            <option value="POST" selected>POST</option>
+            <option value="PUT">PUT</option>
+            <option value="PATCH">PATCH</option>
+            <option value="DELETE">DELETE</option>
+        </select>
+        <input type="text" id="url" placeholder="https://api.example.com/data" value="https://jsonplaceholder.typicode.com/posts">
     </div>
-    <button id="addHeader">ヘッダーを追加</button>
-    
-    <select id="methodSelect">
-        <option value="GET">GET</option>
-        <option value="POST">POST</option>
-        <option value="PUT">PUT</option>
-        <option value="DELETE">DELETE</option>
-    </select>
-    <button id="sendRequest">リクエストを送信</button>
-    
-    <pre id="responseOutput"></pre>
-    
-    <script src="script.js"></script>
+
+    <h2>Headers <span class="label-note">(JSON format)</span></h2>
+    <textarea id="headers" placeholder='{
+  "Content-Type": "application/json",
+  "Authorization": "Bearer token"
+}'>{
+  "Content-Type": "application/json; charset=UTF-8"
+}</textarea>
+
+    <h2>Body / Payload <span class="label-note">(JSON or Text)</span></h2>
+    <textarea id="body" placeholder='{"key": "value"}'>{
+  "title": "foo",
+  "body": "bar",
+  "userId": 1
+}</textarea>
+
+    <div style="margin-top: 20px;">
+        <button id="sendBtn" onclick="sendRequest()">Send Request</button>
+    </div>
+
+    <div class="response-area" id="responseArea" style="display:none;">
+        <h2>Response Status</h2>
+        <div id="statusCode" class="status-bar"></div>
+
+        <h2>Response Body</h2>
+        <pre id="responseBody"></pre>
+        
+        <h2>Response Headers</h2>
+        <pre id="responseHeaders"></pre>
+    </div>
+</div>
+
+<script>
+    async function sendRequest() {
+        const method = document.getElementById('method').value;
+        const url = document.getElementById('url').value;
+        const headersText = document.getElementById('headers').value;
+        const bodyText = document.getElementById('body').value;
+        
+        const sendBtn = document.getElementById('sendBtn');
+        const responseArea = document.getElementById('responseArea');
+        const statusCodeEl = document.getElementById('statusCode');
+        const bodyEl = document.getElementById('responseBody');
+        const headersEl = document.getElementById('responseHeaders');
+
+        // UI Reset
+        sendBtn.disabled = true;
+        sendBtn.textContent = "Sending...";
+        responseArea.style.display = 'none';
+        statusCodeEl.className = 'status-bar';
+        bodyEl.textContent = '';
+        headersEl.textContent = '';
+
+        try {
+            // 1. Parse Headers (JSON validation)
+            let headers = {};
+            if (headersText.trim()) {
+                try {
+                    headers = JSON.parse(headersText);
+                } catch (e) {
+                    alert("ヘッダーのJSON形式が正しくありません。\n" + e.message);
+                    throw new Error("Invalid Headers JSON");
+                }
+            }
+
+            // 2. Prepare Fetch Options
+            const options = {
+                method: method,
+                headers: headers
+            };
+
+            // GET/HEAD methods generally shouldn't have a body
+            if (method !== 'GET' && method !== 'HEAD' && bodyText.trim()) {
+                options.body = bodyText;
+            }
+
+            // 3. Execute Fetch
+            const startTime = performance.now();
+            const response = await fetch(url, options);
+            const endTime = performance.now();
+
+            // 4. Process Response
+            const statusText = `${response.status} ${response.statusText} (${Math.round(endTime - startTime)}ms)`;
+            statusCodeEl.textContent = statusText;
+            statusCodeEl.style.display = 'block';
+            
+            if (response.ok) {
+                statusCodeEl.classList.add('status-success');
+            } else {
+                statusCodeEl.classList.add('status-error');
+            }
+
+            // Extract Headers
+            const resHeaders = {};
+            response.headers.forEach((value, key) => {
+                resHeaders[key] = value;
+            });
+            headersEl.textContent = JSON.stringify(resHeaders, null, 2);
+
+            // Extract Body (Try JSON, fallback to text)
+            const textData = await response.text();
+            try {
+                const jsonData = JSON.parse(textData);
+                bodyEl.textContent = JSON.stringify(jsonData, null, 2);
+            } catch (e) {
+                bodyEl.textContent = textData;
+            }
+
+            responseArea.style.display = 'block';
+
+        } catch (error) {
+            if (error.message === "Invalid Headers JSON") {
+                // Already handled alert
+            } else {
+                statusCodeEl.textContent = "Network Error / CORS Error: " + error.message;
+                statusCodeEl.classList.add('status-error');
+                statusCodeEl.style.display = 'block';
+                responseArea.style.display = 'block';
+                bodyEl.textContent = "Check console (F12) for detailed error info.\nPossible cause: CORS policy blocks request from browser.";
+            }
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.textContent = "Send Request";
+        }
+    }
+</script>
+
 </body>
 </html>
