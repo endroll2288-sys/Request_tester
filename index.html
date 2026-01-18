@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTTP Request Tester</title>
+    <style>
+        
+        :root { --bg-color: #f4f6f8; --primary: #28a745; --code-bg: #2d2d2d; --code-text: #f8f8f2; }
+        body { font-family: sans-serif; background: var(--bg-color); padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { border-bottom: 2px solid #ddd; padding-bottom: 10px; }
+        .input-group { display: flex; gap: 10px; margin-bottom: 15px; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        select { width: 120px; flex-shrink: 0; }
+        textarea { font-family: monospace; min-height: 100px; }
+        button { background: var(--primary); color: white; border: none; padding: 12px; font-size: 1rem; border-radius: 4px; cursor: pointer; width: 100%; font-weight: bold; }
+        button:hover { opacity: 0.9; }
+        .response-area { margin-top: 30px; border-top: 2px dashed #ddd; padding-top: 20px; display: none; }
+        pre { background: var(--code-bg); color: var(--code-text); padding: 15px; border-radius: 4px; overflow-x: auto; }
+        .badge { background: #007bff; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Proxy Request Tester <span class="badge">Node.js版</span></h1>
+    
+
+    <div class="input-group">
+        <select id="method">
+            <option value="GET">GET</option>
+            <option value="POST" selected>POST</option>
+            <option value="PUT">PUT</option>
+            <option value="DELETE">DELETE</option>
+        </select>
+        <input type="text" id="url" value="" placeholder="Target URL(https://example.com)">
+    </div>
+
+    <h3>Headers (JSON)</h3>
+    <textarea id="headers" placeholder='{"Content-Type": "application/json"}'>{
+  "Content-Type": "application/json",
+}</textarea>
+
+    <h3>Body (JSON or Text)</h3>
+    <textarea id="body" placeholder='{"key": "value"}'>{
+  "test": "data"
+}</textarea>
+
+    <div style="margin-top: 20px;">
+        <button id="sendBtn" onclick="sendViaProxy()">Send Request</button>
+    </div>
+
+    <div class="response-area" id="responseArea">
+        <h3>Response Status</h3>
+        <pre id="statusCode">Waiting...</pre>
+
+        <h3>Response Headers (from Target)</h3>
+        <pre id="responseHeaders">Waiting...</pre>
+
+        <h3>Response Body</h3>
+        <pre id="responseBody">Waiting...</pre>
+    </div>
+</div>
+
+<script>
+    async function sendViaProxy() {
+        const method = document.getElementById('method').value;
+        const targetUrl = document.getElementById('url').value;
+        const headersText = document.getElementById('headers').value;
+        const bodyText = document.getElementById('body').value;
+
+        const responseArea = document.getElementById('responseArea');
+        const statusCodeEl = document.getElementById('statusCode');
+        const headersEl = document.getElementById('responseHeaders');
+        const bodyEl = document.getElementById('responseBody');
+
+        responseArea.style.display = 'block';
+        statusCodeEl.textContent = 'Sending to proxy...';
+
+        // ヘッダーとボディのパース処理
+        let headers = {};
+        let bodyData = null;
+        try {
+            if (headersText.trim()) headers = JSON.parse(headersText);
+            if (bodyText.trim() && method !== 'GET') {
+                try {
+                    bodyData = JSON.parse(bodyText);
+                } catch {
+                    bodyData = bodyText; 
+                }
+            }
+        } catch (e) {
+            alert("JSON format error: " + e.message);
+            return;
+        }
+
+        
+        const proxyPayload = {
+            targetUrl: targetUrl,
+            method: method,
+            headers: headers,
+            body: bodyData
+        };
+
+        try {
+            
+            const res = await fetch('/proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(proxyPayload)
+            });
+
+            const result = await res.json();
+
+           
+            statusCodeEl.textContent = `${result.status} ${result.statusText || ''}`;
+
+            headersEl.textContent = JSON.stringify(result.headers, null, 2);
+
+            
+            if (typeof result.data === 'object') {
+                bodyEl.textContent = JSON.stringify(result.data, null, 2);
+            } else {
+                bodyEl.textContent = result.data;
+            }
+
+        } catch (error) {
+            statusCodeEl.textContent = "Proxy Connection Error";
+            bodyEl.textContent = "Is your Node.js server running?\nRun: node server.js\n\nError: " + error.message;
+        }
+    }
+</script>
+
+</body>
+</html>
