@@ -78,10 +78,19 @@ app.post('/proxy', async (req, res) => {
             data: responseData // 書き換え済みのHTML、または通常のJSONデータ
         });
 
-    } catch (error) {
+    } // エラー時のレスポンス（status というキーが存在しない！）
+catch (error) {
+    console.error('Proxy Error:', error.message);
+    res.status(500).json({
+        error: error.message,
+        details: error.response ? error.response.data : 'No response from target'
+    });
+}
+    
+    /*catch (error) {
         console.error('Proxy Error:', error.message);
         res.status(500).json({ error: error.message });
-    }
+    }*/
 });
 
 
