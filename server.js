@@ -78,19 +78,20 @@ app.post('/proxy', async (req, res) => {
             data: responseData // 書き換え済みのHTML、または通常のJSONデータ
         });
 
-    } // エラー時のレスポンス（status というキーが存在しない！）
-catch (error) {
-    console.error('Proxy Error:', error.message);
-    res.status(500).json({
-        error: error.message,
-        details: error.response ? error.response.data : 'No response from target'
-    });
-}
-    
-    /*catch (error) {
+} catch (error) {
         console.error('Proxy Error:', error.message);
-        res.status(500).json({ error: error.message });
-    }*/
+        
+        // エラー時も正常時と同じ構造（status等）でJSONを返してあげる
+        res.status(500).json({
+            status: 500,
+            statusText: 'Internal Server Error',
+            headers: {},
+            data: `Proxy Error: ${error.message}`
+        });
+    }
+
+    
+ 
 });
 
 
