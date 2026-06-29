@@ -21,38 +21,66 @@ app.get('/', (req, res) => {
 
 // プロキシ用エンドポイント
 app.post('/proxy', async (req, res) => {
-    
     const { targetUrl, method, headers, body } = req.body;
-  
- console.log(req.body);
-  
-  console.log(`[Proxy Request] ${method} -> ${targetUrl}`);
 
     try {
-        // Axiosを使って実際のターゲットへリクエスト送信
         const response = await axios({
             url: targetUrl,
             method: method || 'GET',
             headers: headers || {},
             data: body || undefined,
-            validateStatus: () => true // どのようなステータスコードでもエラーにしない
+            // HTMLをテキスト（文字列）として確実に受け取る設定
+            responseType: 'text', 
+            validateStatus: () => true
         });
 
-        // ターゲットからのレスポンスをクライアントへそのまま返す
+        let responseData = response.data;
+
+        // 2. レスポンスがHTML、かつリクエストが成功している場合にパスを書き換える
+        const contentType = response.headers['content-type'] || '';
+        if (contentType.includes('text/html') && typeof responseData === 'string') {
+            
+            const $ = cheerio.load(responseData);
+            const targetBase = new URL(targetUrl); // ターゲットのURLオブジェクトを作成
+
+            // 3. 画像やCSS、JSなどのタグを抽出してURLを絶対パスに置換
+            // href属性を持つタグ (link, a など)
+            $('[href]').each((_, el) => {
+                const href = $(el).attr('href');
+                if (href && !href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('//') && !href.startsWith('data:')) {
+                    try {
+                        // 相対パスを絶対URLに変換
+                        const absoluteUrl = new URL(href, targetBase.origin + targetBase.pathname).href;
+                        $(el).attr('href', absoluteUrl);
+                    } catch (e) { /* パース失敗時はスルー */ }
+                }
+            });
+
+            // src属性を持つタグ (img, script, iframe など)
+            $('[src]').each((_, el) => {
+                const src = $(el).attr('src');
+                if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('//') && !src.startsWith('data:')) {
+                    try {
+                        const absoluteUrl = new URL(src, targetBase.origin + targetBase.pathname).href;
+                        $(el).attr('src', absoluteUrl);
+                    } catch (e) { /* パース失敗時はスルー */ }
+                }
+            });
+
+            // 書き換えたHTMLをレスポンスに設定
+            responseData = $.html();
+        }
+
         res.json({
             status: response.status,
             statusText: response.statusText,
             headers: response.headers,
-            data: response.data
+            data: responseData // 書き換え済みのHTML、または通常のJSONデータ
         });
 
     } catch (error) {
-        
         console.error('Proxy Error:', error.message);
-        res.status(500).json({
-            error: error.message,
-            details: error.response ? error.response.data : 'No response from target'
-        });
+        res.status(500).json({ error: error.message });
     }
 });
 
