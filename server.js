@@ -45,28 +45,47 @@ app.post('/proxy', async (req, res) => {
             const targetBase = new URL(targetUrl); // ターゲットのURLオブジェクトを作成
 
             // 3. 画像やCSS、JSなどのタグを抽出してURLを絶対パスに置換
-            // href属性を持つタグ (link, a など)
-            $('[href]').each((_, el) => {
-                const href = $(el).attr('href');
-                if (href && !href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('//') && !href.startsWith('data:')) {
-                    try {
-                        // 相対パスを絶対URLに変換
-                        const absoluteUrl = new URL(href, targetBase.origin + targetBase.pathname).href;
-                        $(el).attr('href', absoluteUrl);
-                    } catch (e) { /* パース失敗時はスルー */ }
-                }
-            });
+// 3. 画像やCSS、リンクなどのタグを抽出してURLを絶対パスに置換
 
-            // src属性を持つタグ (img, script, iframe など)
-            $('[src]').each((_, el) => {
-                const src = $(el).attr('src');
-                if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('//') && !src.startsWith('data:')) {
-                    try {
-                        const absoluteUrl = new URL(src, targetBase.origin + targetBase.pathname).href;
-                        $(el).attr('src', absoluteUrl);
-                    } catch (e) { /* パース失敗時はスルー */ }
-                }
-            });
+// href属性を持つタグ (link, a など)
+$('[href]').each((_, el) => {
+    const href = $(el).attr('href');
+    if (!href) return;
+
+    // トリミングして、ハッシュのみ、またはjavascript:から始まるものはスキップ
+    const trimmedHref = href.trim();
+    if (trimmedHref.startsWith('#') || trimmedHref.startsWith('javascript:')) return;
+
+    if (!trimmedHref.startsWith('http://') && !trimmedHref.startsWith('https://') && !trimmedHref.startsWith('//') && !trimmedHref.startsWith('data:')) {
+        try {
+            // targetUrl（例: https://example.com/blog/index.html）をそのまま基準にする
+            // これにより、ブラウザと全く同じURL解決が行われます
+            const absoluteUrl = new URL(trimmedHref, targetUrl).href;
+            $(el).attr('href', absoluteUrl);
+        } catch (e) {
+            console.error('href変換エラー:', e.message, trimmedHref);
+        }
+    }
+});
+
+// src属性を持つタグ (img, script, iframe など)
+$('[src]').each((_, el) => {
+    const src = $(el).attr('src');
+    if (!src) return;
+
+    const trimmedSrc = src.trim();
+    if (trimmedSrc.startsWith('#') || trimmedSrc.startsWith('javascript:')) return;
+
+    if (!trimmedSrc.startsWith('http://') && !trimmedSrc.startsWith('https://') && !trimmedSrc.startsWith('//') && !trimmedSrc.startsWith('data:')) {
+        try {
+            // ここもtargetUrlをそのまま基準にする
+            const absoluteUrl = new URL(trimmedSrc, targetUrl).href;
+            $(el).attr('src', absoluteUrl);
+        } catch (e) {
+            console.error('src変換エラー:', e.message, trimmedSrc);
+        }
+    }
+});
 
             // 書き換えたHTMLをレスポンスに設定
             responseData = $.html();
