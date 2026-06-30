@@ -30,64 +30,80 @@ app.post('/proxy', async (req, res) => {
             method: method || 'GET',
             headers: headers || {},
             data: body || undefined,
-            // HTMLをテキスト（文字列）として確実に受け取る設定
             responseType: 'text', 
             validateStatus: () => true
         });
 
         let responseData = response.data;
-
-        // 2. レスポンスがHTML、かつリクエストが成功している場合にパスを書き換える
         const contentType = response.headers['content-type'] || '';
+
         if (contentType.includes('text/html') && typeof responseData === 'string') {
-            
             const $ = cheerio.load(responseData);
-            const targetBase = new URL(targetUrl); // ターゲットのURLオブジェクトを作成
+            
+            // --- 👇 [新規追加] CSSの追加fetch & インライン化処理 ---
+            const cssPromises = [];
+            
+            $('link[rel="stylesheet"]').each((_, el) => {
+                const href = $(el).attr('href');
+                if (!href) return;
 
-            // 3. 画像やCSS、JSなどのタグを抽出してURLを絶対パスに置換
-// 3. 画像やCSS、リンクなどのタグを抽出してURLを絶対パスに置換
+                try {
+                    // CSSの絶対URLを計算
+                    const absoluteCssUrl = new URL(href.trim(), targetUrl).href;
+                    
+                    // 非同期でCSSを取得するPromiseを配列にためる
+                    const fetchCss = axios.get(absoluteCssUrl, { 
+                        timeout: 3000, // 3秒でタイムアウト
+                        headers: headers || {} 
+                    }).then(cssRes => {
+                        // 読み込めたら、<link>タグを<style>タグに置き換える
+                        $(el).replaceWith(`<style>/* Inline CSS from ${href} */\n${cssRes.data}</style>`);
+                    }).catch(err => {
+                        console.error(`CSS fetch失敗: ${absoluteCssUrl}`, err.message);
+                        // 失敗した場合は、ブラウザ側に解決させるため絶対パスのhrefに書き換えておく
+                        $(el).attr('href', absoluteCssUrl);
+                    });
+                    
+                    cssPromises.push(fetchCss);
+                } catch (e) { /* URLパースエラー時はスルー */ }
+            });
 
-// href属性を持つタグ (link, a など)
-$('[href]').each((_, el) => {
-    const href = $(el).attr('href');
-    if (!href) return;
+            // すべてのCSSのfetchと置き換えが完了するのを待つ
+            await Promise.all(cssPromises);
+            // --- 👆 ここまで ---
 
-    // トリミングして、ハッシュのみ、またはjavascript:から始まるものはスキップ
-    const trimmedHref = href.trim();
-    if (trimmedHref.startsWith('#') || trimmedHref.startsWith('javascript:')) return;
 
-    if (!trimmedHref.startsWith('http://') && !trimmedHref.startsWith('https://') && !trimmedHref.startsWith('//') && !trimmedHref.startsWith('data:')) {
-        try {
-            // targetUrl（例: https://example.com/blog/index.html）をそのまま基準にする
-            // これにより、ブラウザと全く同じURL解決が行われます
-            const absoluteUrl = new URL(trimmedHref, targetUrl).href;
-            $(el).attr('href', absoluteUrl);
-        } catch (e) {
-            console.error('href変換エラー:', e.message, trimmedHref);
-        }
-    }
-});
+            // 既存のhref属性（aタグなど）の絶対URL化処理
+            $('[href]').each((_, el) => {
+                // すでに<style>に置き換わったものはスキップされる
+                if (el.name === 'link' && $(el).attr('rel') === 'stylesheet') return;
+                
+                const href = $(el).attr('href');
+                if (!href) return;
+                const trimmedHref = href.trim();
+                if (trimmedHref.startsWith('#') || trimmedHref.startsWith('javascript:')) return;
 
-// src属性を持つタグ (img, script, iframe など)
-$('[src]').each((_, el) => {
-    const src = $(el).attr('src');
-    if (!src) return;
+                if (!trimmedHref.startsWith('http://') && !trimmedHref.startsWith('https://') && !trimmedHref.startsWith('//') && !trimmedHref.startsWith('data:')) {
+                    try {
+                        $(el).attr('href', new URL(trimmedHref, targetUrl).href);
+                    } catch (e) {}
+                }
+            });
 
-    const trimmedSrc = src.trim();
-    if (trimmedSrc.startsWith('#') || trimmedSrc.startsWith('javascript:')) return;
+            // 既存のsrc属性（imgタグなど）の絶対URL化処理
+            $('[src]').each((_, el) => {
+                const src = $(el).attr('src');
+                if (!src) return;
+                const trimmedSrc = src.trim();
+                if (trimmedSrc.startsWith('#') || trimmedSrc.startsWith('javascript:')) return;
 
-    if (!trimmedSrc.startsWith('http://') && !trimmedSrc.startsWith('https://') && !trimmedSrc.startsWith('//') && !trimmedSrc.startsWith('data:')) {
-        try {
-            // ここもtargetUrlをそのまま基準にする
-            const absoluteUrl = new URL(trimmedSrc, targetUrl).href;
-            $(el).attr('src', absoluteUrl);
-        } catch (e) {
-            console.error('src変換エラー:', e.message, trimmedSrc);
-        }
-    }
-});
+                if (!trimmedSrc.startsWith('http://') && !trimmedSrc.startsWith('https://') && !trimmedSrc.startsWith('//') && !trimmedSrc.startsWith('data:')) {
+                    try {
+                        $(el).attr('src', new URL(trimmedSrc, targetUrl).href);
+                    } catch (e) {}
+                }
+            });
 
-            // 書き換えたHTMLをレスポンスに設定
             responseData = $.html();
         }
 
@@ -95,13 +111,11 @@ $('[src]').each((_, el) => {
             status: response.status,
             statusText: response.statusText,
             headers: response.headers,
-            data: responseData // 書き換え済みのHTML、または通常のJSONデータ
+            data: responseData
         });
 
-} catch (error) {
+    } catch (error) {
         console.error('Proxy Error:', error.message);
-        
-        // エラー時も正常時と同じ構造（status等）でJSONを返してあげる
         res.status(500).json({
             status: 500,
             statusText: 'Internal Server Error',
@@ -109,9 +123,6 @@ $('[src]').each((_, el) => {
             data: `Proxy Error: ${error.message}`
         });
     }
-
-    
- 
 });
 
 
