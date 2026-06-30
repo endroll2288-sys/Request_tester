@@ -1,191 +1,176 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Fetch & Debug Tester</title>
-    <style>
-        :root { 
-            --bg-color: #f8f9fa; 
-            --primary: #007bff; 
-            --code-bg: #1e1e1e; 
-            --code-text: #d4d4d4; 
-            --border: #dee2e6;
-        }
-        body { font-family: -apple-system, sans-serif; background: var(--bg-color); margin: 0; padding: 20px; color: #333; }
-        h1 { margin-top: 0; font-size: 1.5rem; display: flex; align-items: center; gap: 10px; }
-        h3 { margin: 15px 0 5px 0; font-size: 0.95rem; color: #555; }
-        
-        /* 左右2カラムのレイアウト */
-        .workspace { display: flex; gap: 20px; height: calc(100vh - 80px); min-height: 600px; }
-        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid var(--border); box-sizing: border-box; }
-        .left-panel { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
-        .right-panel { flex: 1.2; display: flex; flex-direction: column; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Fetch & Debug Tester</title>
+    <style>
+        :root { 
+            --bg-color: #f8f9fa; 
+            --primary: #007bff; 
+            --code-bg: #1e1e1e; 
+            --code-text: #d4d4d4; 
+            --border: #dee2e6;
+        }
+        body { font-family: -apple-system, sans-serif; background: var(--bg-color); margin: 0; padding: 20px; color: #333; }
+        h1 { margin-top: 0; font-size: 1.5rem; display: flex; align-items: center; gap: 10px; }
+        h3 { margin: 15px 0 5px 0; font-size: 0.95rem; color: #555; }
+        
+        /* 左右2カラムのレイアウト */
+        .workspace { display: flex; gap: 20px; height: calc(100vh - 80px); min-height: 600px; }
+        .panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid var(--border); box-sizing: border-box; }
+        .left-panel { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+        .right-panel { flex: 1.2; display: flex; flex-direction: column; }
 
-        .input-group { display: flex; gap: 10px; margin-bottom: 15px; }
-        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-family: monospace; }
-        select { width: 100px; flex-shrink: 0; font-family: sans-serif; }
-        textarea { min-height: 80px; resize: vertical; }
-        
-        button { background: var(--primary); color: white; border: none; padding: 12px; font-size: 1rem; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
-        button:hover { opacity: 0.9; }
-        
-        /* タブ切り替え（コード vs プレビュー） */
-        .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 10px; }
-        .tab { padding: 8px 16px; cursor: pointer; border: none; background: none; font-weight: bold; color: #666; }
-        .tab.active { color: var(--primary); border-bottom: 2px solid var(--primary); margin-bottom: -2px; }
-        
-        .tab-content { flex: 1; display: none; flex-direction: column; overflow: hidden; }
-        .tab-content.active { display: flex; }
+        .input-group { display: flex; gap: 10px; margin-bottom: 15px; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-family: monospace; }
+        select { width: 100px; flex-shrink: 0; font-family: sans-serif; }
+        textarea { min-height: 80px; resize: vertical; }
+        
+        button { background: var(--primary); color: white; border: none; padding: 12px; font-size: 1rem; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
+        button:hover { opacity: 0.9; }
+        
+        /* タブ切り替え（コード vs プレビュー） */
+        .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 10px; }
+        .tab { padding: 8px 16px; cursor: pointer; border: none; background: none; font-weight: bold; color: #666; }
+        .tab.active { color: var(--primary); border-bottom: 2px solid var(--primary); margin-bottom: -2px; }
+        
+        .tab-content { flex: 1; display: none; flex-direction: column; overflow: hidden; }
+        .tab-content.active { display: flex; }
 
-        pre { background: var(--code-bg); color: var(--code-text); padding: 15px; border-radius: 4px; overflow: auto; margin: 0; flex: 1; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all; }
-        
-        /* 安全な受皿となるiframe */
-        .preview-frame { width: 100%; flex: 1; border: 1px solid var(--border); border-radius: 4px; background: white; }
-        .status-badge { background: #6c757d; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.85rem; font-family: monospace; display: inline-block; margin-bottom: 10px; }
-    </style>
+        pre { background: var(--code-bg); color: var(--code-text); padding: 15px; border-radius: 4px; overflow: auto; margin: 0; flex: 1; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all; }
+        
+        /* 安全な受皿となるiframe */
+        .preview-frame { width: 100%; flex: 1; border: 1px solid var(--border); border-radius: 4px; background: white; }
+        .status-badge { background: #6c757d; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.85rem; font-family: monospace; display: inline-block; margin-bottom: 10px; }
+    </style>
 </head>
 <body>
 
 <h1>🌐 Web Fetch & Debug Tester</h1>
 
 <div class="workspace">
-    <div class="panel left-panel">
-        <h3>Target URL</h3>
-        <div class="input-group">
-            <select id="method">
-                <option value="GET" selected>GET</option>
-                <option value="POST">POST</option>
-            </select>
-            <input type="text" id="url" value="https://example.com" placeholder="https://example.com">
-        </div>
+    <div class="panel left-panel">
+        <h3>Target URL</h3>
+        <div class="input-group">
+            <select id="method">
+                <option value="GET" selected>GET</option>
+                <option value="POST">POST</option>
+            </select>
+            <input type="text" id="url" value="https://example.com" placeholder="https://example.com">
+        </div>
 
-        <h3>Headers (JSON)</h3>
-        <textarea id="headers" placeholder='{"User-Agent": "Bot"}'>{}</textarea>
+        <h3>Headers (JSON)</h3>
+        <textarea id="headers" placeholder='{"User-Agent": "Bot"}'>{}</textarea>
 
-        <h3>Body (JSON or Text)</h3>
-        <textarea id="body" placeholder='{"key": "value"}'></textarea>
+        <h3>Body (JSON or Text)</h3>
+        <textarea id="body" placeholder='{"key": "value"}'></textarea>
 
-        <div style="margin-top: auto; padding-top: 15px;">
-            <button id="sendBtn" onclick="sendViaProxy()">Fetch & Preview</button>
-        </div>
-    </div>
+        <div style="margin-top: auto; padding-top: 15px;">
+            <button id="sendBtn" onclick="sendViaProxy()">Fetch & Preview</button>
+        </div>
+    </div>
 
-    <div class="panel right-panel">
-        <div>
-            <span class="status-badge" id="statusCode">Status: Ready</span>
-        </div>
-        
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('preview')">HTML Preview</button>
-            <button class="tab" onclick="switchTab('code')">Raw Response</button>
-            <button class="tab" onclick="switchTab('headers-tab')">Headers</button>
-        </div>
+    <div class="panel right-panel">
+        <div>
+            <span class="status-badge" id="statusCode">Status: Ready</span>
+        </div>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('preview')">HTML Preview</button>
+            <button class="tab" onclick="switchTab('code')">Raw Response</button>
+            <button class="tab" onclick="switchTab('headers-tab')">Headers</button>
+        </div>
 
-        <div id="tab-preview" class="tab-content active">
-            <iframe id="previewFrame" class="preview-frame" sandbox="allow-scripts allow-top-navigation"></iframe>
-        </div>
+<div id="tab-preview" class="tab-content active">
+    <iframe id="previewFrame" class="preview-frame" sandbox="allow-scripts allow-same-origin"></iframe>
+</div>
 
-        <div id="tab-code" class="tab-content">
-            <pre id="responseBody">Waiting for fetch...</pre>
-        </div>
+        <div id="tab-code" class="tab-content">
+            <pre id="responseBody">Waiting for fetch...</pre>
+        </div>
 
-        <div id="tab-headers-tab" class="tab-content">
-            <pre id="responseHeaders">Waiting for fetch...</pre>
-        </div>
-    </div>
+        <div id="tab-headers-tab" class="tab-content">
+            <pre id="responseHeaders">Waiting for fetch...</pre>
+        </div>
+    </div>
 </div>
 
 <script>
-    // タブ切り替えロジック
-    function switchTab(tabName) {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        
-        event.target.classList.add('active');
-        document.getElementById(`tab-${tabName}`).classList.add('active');
-    }
+    // タブ切り替えロジック
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        event.target.classList.add('active');
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+    }
 
-    // ★【新規追加】ページ読み込み時にURLパラメータ (?url=...) があれば自動Fetch
-    window.addEventListener('DOMContentLoaded', () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const targetUrlParam = urlParams.get('url');
+    async function sendViaProxy() {
+        const method = document.getElementById('method').value;
+        const targetUrl = document.getElementById('url').value;
+        const headersText = document.getElementById('headers').value;
+        const bodyText = document.getElementById('body').value;
 
-        if (targetUrlParam) {
-            // パラメータの値をURL入力欄にセット
-            document.getElementById('url').value = decodeURIComponent(targetUrlParam);
-            // リンク遷移は基本的にGETなのでmethodをリセット
-            document.getElementById('method').value = 'GET';
-            // 自動Fetch実行
-            sendViaProxy();
-            // アドレスバーをすっきりさせるためにパラメータを非表示にする（任意）
-            history.replaceState(null, '', window.location.pathname);
-        }
-    });
+        const statusCodeEl = document.getElementById('statusCode');
+        const headersEl = document.getElementById('responseHeaders');
+        const bodyEl = document.getElementById('responseBody');
+        const previewFrame = document.getElementById('previewFrame');
 
-    async function sendViaProxy() {
-        const method = document.getElementById('method').value;
-        const targetUrl = document.getElementById('url').value;
-        const headersText = document.getElementById('headers').value;
-        const bodyText = document.getElementById('body').value;
+        statusCodeEl.textContent = 'Status: Fetching...';
+        statusCodeEl.style.background = '#007bff';
 
-        const statusCodeEl = document.getElementById('statusCode');
-        const headersEl = document.getElementById('responseHeaders');
-        const bodyEl = document.getElementById('responseBody');
-        const previewFrame = document.getElementById('previewFrame');
+        let headers = {};
+        let bodyData = null;
+        try {
+            if (headersText.trim()) headers = JSON.parse(headersText);
+            if (bodyText.trim() && method !== 'GET') {
+                try { bodyData = JSON.parse(bodyText); } catch { bodyData = bodyText; }
+            }
+        } catch (e) {
+            alert("JSONフォーマットエラーです。末尾のカンマなどを確認してください:\n" + e.message);
+            return;
+        }
 
-        statusCodeEl.textContent = 'Status: Fetching...';
-        statusCodeEl.style.background = '#007bff';
+        try {
+            const res = await fetch('/proxy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetUrl, method, headers, body: bodyData })
+            });
 
-        let headers = {};
-        let bodyData = null;
-        try {
-            if (headersText.trim()) headers = JSON.parse(headersText);
-            if (bodyText.trim() && method !== 'GET') {
-                try { bodyData = JSON.parse(bodyText); } catch { bodyData = bodyText; }
-            }
-        } catch (e) {
-            alert("JSONフォーマットエラーです。末尾のカンマなどを確認してください:\n" + e.message);
-            return;
-        }
+            const result = await res.json();
 
-        try {
-            const res = await fetch('/proxy', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetUrl, method, headers, body: bodyData })
-            });
+            // ステータス表示
+            statusCodeEl.textContent = `Status: ${result.status} ${result.statusText || ''}`;
+            statusCodeEl.style.background = result.status >= 200 && result.status < 300 ? '#28a745' : '#dc3545';
 
-            const result = await res.json();
+            // ヘッダー表示
+            headersEl.textContent = JSON.stringify(result.headers, null, 2);
 
-            // ステータス表示
-            statusCodeEl.textContent = `Status: ${result.status} ${result.statusText || ''}`;
-            statusCodeEl.style.background = result.status >= 200 && result.status < 300 ? '#28a745' : '#dc3545';
+            // ボディ（HTML等）の処理
+            let htmlContent = '';
+            if (typeof result.data === 'object') {
+                htmlContent = JSON.stringify(result.data, null, 2);
+            } else {
+                htmlContent = result.data || '';
+            }
 
-            // ヘッダー表示
-            headersEl.textContent = JSON.stringify(result.headers, null, 2);
+            bodyEl.textContent = htmlContent;
 
-            // ボディ（HTML等）の処理
-            let htmlContent = '';
-            if (typeof result.data === 'object') {
-                htmlContent = JSON.stringify(result.data, null, 2);
-            } else {
-                htmlContent = result.data || '';
-            }
+            // 重要：安全なiframeにHTMLを流し込む
+            // srcdocを使うことで、クロスドメインの制限なく文字列をHTMLとしてレンダリングできます
+            previewFrame.srcdoc = htmlContent;
 
-            bodyEl.textContent = htmlContent;
-
-            // 重要：安全なiframeにHTMLを流し込む
-            previewFrame.srcdoc = htmlContent;
-
-        } catch (error) {
-            statusCodeEl.textContent = "Status: Error";
-            statusCodeEl.style.background = '#dc3545';
-            bodyEl.textContent = "Proxy接続エラー:\n" + error.message;
-            previewFrame.srcdoc = "<p style='color:red;'>Fetchに失敗しました。</p>";
-        }
-    }
+        } catch (error) {
+            statusCodeEl.textContent = "Status: Error";
+            statusCodeEl.style.background = '#dc3545';
+            bodyEl.textContent = "Proxy接続エラー:\n" + error.message;
+            previewFrame.srcdoc = "<p style='color:red;'>Fetchに失敗しました。</p>";
+        }
+    }
 </script>
 
 </body>
 </html>
+
