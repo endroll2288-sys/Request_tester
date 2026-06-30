@@ -73,22 +73,34 @@ app.post('/proxy', async (req, res) => {
             // --- 👆 ここまで ---
 
 
-            // 既存のhref属性（aタグなど）の絶対URL化処理
-            $('[href]').each((_, el) => {
-                // すでに<style>に置き換わったものはスキップされる
-                if (el.name === 'link' && $(el).attr('rel') === 'stylesheet') return;
-                
-                const href = $(el).attr('href');
-                if (!href) return;
-                const trimmedHref = href.trim();
-                if (trimmedHref.startsWith('#') || trimmedHref.startsWith('javascript:')) return;
+  // 【server.js の [href] 処理部分を以下に修正】
 
-                if (!trimmedHref.startsWith('http://') && !trimmedHref.startsWith('https://') && !trimmedHref.startsWith('//') && !trimmedHref.startsWith('data:')) {
-                    try {
-                        $(el).attr('href', new URL(trimmedHref, targetUrl).href);
-                    } catch (e) {}
-                }
-            });
+$('[href]').each((_, el) => {
+    const href = $(el).attr('href');
+    if (!href) return;
+
+    const trimmedHref = href.trim();
+    if (trimmedHref.startsWith('#') || trimmedHref.startsWith('javascript:')) return;
+    if (el.name === 'link' && $(el).attr('rel') === 'stylesheet') return; // CSSはスルー
+
+    try {
+        // 1. 絶対URLを作る
+        const absoluteUrl = new URL(trimmedHref, targetUrl).href;
+        
+        if (el.name === 'a') {
+            // 2. <a> タグの場合：クリック時に親画面（window.parent）を操作する特殊なスクリプトを仕込む
+            // エスケープ処理をして安全にURLを文字列として渡す
+            const escapedUrl = absoluteUrl.replace(/'/g, "\\'");
+            
+            // hrefの中に、親画面のinputを書き換えて関数を実行するJSを直接埋め込む
+            $(el).attr('href', `javascript:window.parent.document.getElementById('url').value='${escapedUrl}'; window.parent.document.getElementById('method').value='GET'; window.parent.sendViaProxy(); void(0);`);
+            // 念のためターゲット属性は削除（または _self に）しておく
+            $(el).removeAttr('target'); 
+        } else {
+            $(el).attr('href', absoluteUrl);
+        }
+    } catch (e) {}
+});
 
             // 既存のsrc属性（imgタグなど）の絶対URL化処理
             $('[src]').each((_, el) => {
