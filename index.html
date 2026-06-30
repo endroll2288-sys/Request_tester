@@ -83,7 +83,7 @@
         </div>
 
         <div id="tab-preview" class="tab-content active">
-            <iframe id="previewFrame" class="preview-frame" sandbox="allow-scripts"></iframe>
+            <iframe id="previewFrame" class="preview-frame" sandbox="allow-scripts allow-top-navigation"></iframe>
         </div>
 
         <div id="tab-code" class="tab-content">
@@ -105,6 +105,23 @@
         event.target.classList.add('active');
         document.getElementById(`tab-${tabName}`).classList.add('active');
     }
+
+    // ★【新規追加】ページ読み込み時にURLパラメータ (?url=...) があれば自動Fetch
+    window.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetUrlParam = urlParams.get('url');
+
+        if (targetUrlParam) {
+            // パラメータの値をURL入力欄にセット
+            document.getElementById('url').value = decodeURIComponent(targetUrlParam);
+            // リンク遷移は基本的にGETなのでmethodをリセット
+            document.getElementById('method').value = 'GET';
+            // 自動Fetch実行
+            sendViaProxy();
+            // アドレスバーをすっきりさせるためにパラメータを非表示にする（任意）
+            history.replaceState(null, '', window.location.pathname);
+        }
+    });
 
     async function sendViaProxy() {
         const method = document.getElementById('method').value;
@@ -159,7 +176,6 @@
             bodyEl.textContent = htmlContent;
 
             // 重要：安全なiframeにHTMLを流し込む
-            // srcdocを使うことで、クロスドメインの制限なく文字列をHTMLとしてレンダリングできます
             previewFrame.srcdoc = htmlContent;
 
         } catch (error) {
