@@ -305,6 +305,50 @@ app.get('/proxy-image', async (req, res) => {
 });
 
 
+// --- 👇 [新規追加] 動画・音声用のストリーミングプロキシ ---
+app.get('/proxy-media', async (req, res) => {
+    const mediaUrl = req.query.url;
+    if (!mediaUrl) return res.status(400).send('URL is required');
+
+    try {
+        // ブラウザからのRangeヘッダー（「動画のココからココまでを頂戴」という要求）を引き継ぐ
+        const requestHeaders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        };
+        if (req.headers.range) {
+            requestHeaders['Range'] = req.headers.range;
+        }
+
+        const response = await axios({
+            url: mediaUrl,
+            method: 'GET',
+            responseType: 'stream', // 💡 ここが重要！丸ごとではなく「ストリーム（流体）」として受け取る
+            headers: requestHeaders,
+            validateStatus: () => true
+        });
+
+        // ターゲットから返ってきた重要なヘッダーをブラウザにそのまま横流しする
+        if (response.headers['content-type']) res.setHeader('Content-Type', response.headers['content-type']);
+        if (response.headers['content-length']) res.setHeader('Content-Length', response.headers['content-length']);
+        if (response.headers['content-range']) res.setHeader('Content-Range', response.headers['content-range']);
+        if (response.headers['accept-ranges']) res.setHeader('Accept-Ranges', response.headers['accept-ranges']);
+        
+        // ステータスコード（通常の200や、部分配信の206 Partial Contentなど）をそのまま引き継ぐ
+        res.status(response.status);
+
+        // データをリアルタイムにブラウザへ流し込む（パイプ）
+        response.data.pipe(res);
+
+    } catch (error) {
+        console.error('Media Proxy Error:', error.message);
+        if (!res.headersSent) {
+            res.status(500).send('Failed to stream media');
+        }
+    }
+});
+// --- 👆 ここまで ---
+
+
 app.listen(PORT, () => {
     console.log(`Proxy Server running at http://localhost:${PORT}`);
 });
