@@ -102,7 +102,26 @@ $('[href]').each((_, el) => {
     } catch (e) {}
 });
 
+// --- 👇 [新規追加] <form> タグのプロキシ化処理 ---
+$('form').each((_, el) => {
+    const action = $(el).attr('action') || '';
+    const method = ($(el).attr('method') || 'GET').toUpperCase();
 
+    try {
+        // 1. action 属性を絶対URLに変換する
+        const absoluteActionUrl = new URL(action.trim(), targetUrl).href;
+        $(el).attr('action', absoluteActionUrl);
+
+        // 2. フロントエンドのJavaScriptでフックしやすいように、データ属性を仕込んでおく
+        $(el).attr('data-proxy-method', method);
+        $(el).attr('data-proxy-action', absoluteActionUrl);
+        
+        // 3. 通常の送信（ページ遷移）が起きないように、インラインでonsubmitを無効化（念のため）
+        // 実際の処理は親画面から注入するイベントリスナーで行います
+        $(el).attr('onsubmit', 'return false;');
+    } catch (e) { /* URLパースエラー時はスルー */ }
+});
+// --- 👆 ここまで ---
 
 
             
