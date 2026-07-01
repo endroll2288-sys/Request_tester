@@ -107,6 +107,29 @@ $('[href]').each((_, el) => {
     } catch (e) {}
 });
 
+// --- 👇 [新規追加] 動画・音声などのマルチメディアリソースの絶対URL化 ---
+$('video, audio, source, track, embed, object').each((_, el) => {
+    // それぞれのタグが持ちうるURL属性をチェック
+    const attributes = ['src', 'poster', 'data'];
+    
+    attributes.forEach(attr => {
+        const value = $(el).attr(attr);
+        if (!value) return;
+
+        const trimmedValue = value.trim();
+        // すでに絶対パス等の場合はスルー
+        if (trimmedValue.startsWith('http://') || trimmedValue.startsWith('https://') || trimmedValue.startsWith('//') || trimmedValue.startsWith('data:')) {
+            return;
+        }
+
+        try {
+            const absoluteUrl = new URL(trimmedValue, targetUrl).href;
+            $(el).attr(attr, absoluteUrl);
+        } catch (e) {}
+    });
+});
+// --- 👆 ここまで ---
+            
 // --- 👇 [新規追加] <form> タグのプロキシ化処理 ---
 $('form').each((_, el) => {
     const action = $(el).attr('action') || '';
@@ -176,6 +199,36 @@ $('style').each((_, el) => {
     const rewrittenCss = rewriteCssUrls(rawCss, targetUrl);
     $(el).text(rewrittenCss);
 });
+
+// --- [新規追加] imgやsourceタグの srcset 属性の絶対URL化 ---
+$('[srcset]').each((_, el) => {
+    const srcset = $(el).attr('srcset');
+    if (!srcset) return;
+
+    // コンマで区切られた各リソースのパスを分解して処理
+    const rewrittenSrcset = srcset.split(',').map(part => {
+        const match = part.trim().match(/^(\S+)(.*)$/);
+        if (!match) return part;
+
+        const urlPath = match[1];
+        const descriptor = match[2]; // 「320w」や「2x」などの識別子
+
+        if (urlPath.startsWith('http://') || urlPath.startsWith('https://') || urlPath.startsWith('//') || urlPath.startsWith('data:')) {
+            return part;
+        }
+
+        try {
+            const absoluteUrl = new URL(urlPath, targetUrl).href;
+            return `${absoluteUrl}${descriptor}`;
+        } catch (e) {
+            return part;
+        }
+    }).join(', ');
+
+    $(el).attr('srcset', rewrittenSrcset);
+});
+// ---  ここまで ---
+            
             
 $('[src]').each((_, el) => {
     const src = $(el).attr('src');
