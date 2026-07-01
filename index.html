@@ -168,6 +168,44 @@
             previewFrame.srcdoc = "<p style='color:red;'>Fetchに失敗しました。</p>";
         }
     }
+
+    // 【index.html の script 内（handleIframeLinkClickの下など）に追加】
+
+// iframe内の画像が読み込みに失敗したときに呼び出される関数
+function handleImageError(imgElement) {
+    // すでに一回プロキシ経由に変えている場合は無限ループを防ぐため処理しない
+    if (imgElement.getAttribute('data-proxied') === 'true') return;
+
+    // 元の画像URLを取得
+    const originalSrc = imgElement.getAttribute('data-original-src');
+    
+    // 画像の代わりに🔃マークを表現するスタイルとスタイルシートを一時的に適用
+    imgElement.style.display = 'inline-block';
+    imgElement.style.width = imgElement.width > 30 ? imgElement.width + 'px' : '50px';
+    imgElement.style.height = imgElement.height > 30 ? imgElement.height + 'px' : '50px';
+    imgElement.style.border = '1px dashed #ccc';
+    imgElement.style.background = '#f0f0f0';
+    imgElement.style.cursor = 'pointer';
+    
+    // 代替の画像として、文字（🔃）をSVG画像化したものを一時的にsrcにセット
+    imgElement.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='50' height='50' viewBox='0 0 24 24'><text x='50%' y='55%' font-size='16' text-anchor='middle' dominant-baseline='middle'>🔃</text></svg>";
+    imgElement.title = "クリックしてサーバー経由で画像を再読み込み";
+
+    // 🔃マークをクリックしたときのイベントを仕込む
+    imgElement.onclick = function() {
+        // プロキシ経由のURL（例: /proxy-image?url=https://...）に書き換え
+        const proxyUrl = `/proxy-image?url=${encodeURIComponent(originalSrc)}`;
+        
+        this.setAttribute('data-proxied', 'true');
+        this.src = proxyUrl;
+        
+        // スタイルを元に戻す
+        this.style.border = 'none';
+        this.style.background = 'transparent';
+        this.style.cursor = 'default';
+        this.onclick = null; // イベントを解除
+    };
+}
 </script>
 
 </body>
