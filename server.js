@@ -103,18 +103,34 @@ $('[href]').each((_, el) => {
 });
 
             // 既存のsrc属性（imgタグなど）の絶対URL化処理
-            $('[src]').each((_, el) => {
-                const src = $(el).attr('src');
-                if (!src) return;
-                const trimmedSrc = src.trim();
-                if (trimmedSrc.startsWith('#') || trimmedSrc.startsWith('javascript:')) return;
+    // 【server.js の [src] 処理部分を以下に修正】
 
-                if (!trimmedSrc.startsWith('http://') && !trimmedSrc.startsWith('https://') && !trimmedSrc.startsWith('//') && !trimmedSrc.startsWith('data:')) {
-                    try {
-                        $(el).attr('src', new URL(trimmedSrc, targetUrl).href);
-                    } catch (e) {}
-                }
-            });
+$('[src]').each((_, el) => {
+    const src = $(el).attr('src');
+    if (!src) return;
+
+    const trimmedSrc = src.trim();
+    if (trimmedSrc.startsWith('#') || trimmedSrc.startsWith('javascript:')) return;
+
+    if (!trimmedSrc.startsWith('http://') && !trimmedSrc.startsWith('https://') && !trimmedSrc.startsWith('//') && !trimmedSrc.startsWith('data:')) {
+        try {
+            const absoluteUrl = new URL(trimmedSrc, targetUrl).href;
+            $(el).attr('src', absoluteUrl);
+            
+            // 💡 [新規追加] imgタグの場合、エラーハンドリング用の属性を仕込む
+            if (el.name === 'img') {
+                $(el).attr('data-original-src', absoluteUrl);
+                $(el).attr('onerror', 'window.parent.handleImageError(this)');
+            }
+        } catch (e) {}
+    } else {
+        // すでに絶対パス（http〜）で書かれているimgタグにも同様に仕込む
+        if (el.name === 'img') {
+            $(el).attr('data-original-src', trimmedSrc);
+            $(el).attr('onerror', 'window.parent.handleImageError(this)');
+        }
+    }
+});
 
             responseData = $.html();
         }
@@ -134,6 +150,32 @@ $('[href]').each((_, el) => {
             headers: {},
             data: `Proxy Error: ${error.message}`
         });
+    }
+});
+
+// 【server.js に新規追加：画像プロキシ用】
+app.get('/proxy-image', async (req, res) => {
+    const imageUrl = req.query.url;
+    if (!imageUrl) return res.status(400).send('URL is required');
+
+    try {
+        const response = await axios({
+            url: imageUrl,
+            method: 'GET',
+            responseType: 'arraybuffer', // 画像バイナリをそのまま受け取る
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            validateStatus: () => true
+        });
+
+        // ターゲットから返ってきた Content-Type をそのまま引き継ぐ（image/png など）
+        const contentType = response.headers['content-type'] || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.send(response.data);
+    } catch (error) {
+        console.error('Image Proxy Error:', error.message);
+        res.status(500).send('Failed to fetch image');
     }
 });
 
