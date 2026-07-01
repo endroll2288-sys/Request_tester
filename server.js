@@ -245,4 +245,24 @@ app.listen(PORT, () => {
     console.log(`Proxy Server running at http://localhost:${PORT}`);
 });
 
-
+// --- CSS内のurl()を絶対パスに書き換える関数 ---
+function rewriteCssUrls(cssText, baseUrl) {
+    // url(...) または url("...") または url('...') のパターンにマッチする正規表現
+    return cssText.replace(/url\s*\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, quote, urlPath) => {
+        const trimmedUrl = urlPath.trim();
+        
+        // すでに絶対パス、データURI、またはハッシュの場合はスキップ
+        if (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://') || trimmedUrl.startsWith('//') || trimmedUrl.startsWith('data:')) {
+            return match;
+        }
+        
+        try {
+            // 計算して絶対URLを作る
+            const absoluteUrl = new URL(trimmedUrl, baseUrl).href;
+            return `url(${quote}${absoluteUrl}${quote})`;
+        } catch (e) {
+            return match;
+        }
+    });
+}
+// ---  ここまで ---
