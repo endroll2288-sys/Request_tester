@@ -156,11 +156,64 @@
                 htmlContent = result.data || '';
             }
 
-            bodyEl.textContent = htmlContent;
+bodyEl.textContent = htmlContent;
 
-            // 重要：安全なiframeにHTMLを流し込む
-            previewFrame.srcdoc = htmlContent;
+// 重要：安全なiframeにHTMLを流し込む
+previewFrame.srcdoc = htmlContent;
 
+// --- 👇 [新規追加] iframe内のフォーム送信を横取りする処理 ---
+// srcdocの読み込み完了を待ってからイベントを設定する
+previewFrame.onload = function() {
+    const iframeDoc = previewFrame.contentDocument || previewFrame.contentWindow.document;
+    if (!iframeDoc) return;
+
+    // iframe内のすべてのフォームを対象にする
+    iframeDoc.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', function(event) {
+            // 通常のブラウザ送信（ページ遷移）を完全にストップ
+            event.preventDefault();
+
+            const actionUrl = form.getAttribute('data-proxy-action') || form.action;
+            const method = form.getAttribute('data-proxy-method') || 'GET';
+
+            // フォーム内の入力データを集める (input, textarea, select等)
+            const formData = new FormData(form);
+            let bodyObj = {};
+            
+            if (method === 'POST') {
+                // POSTの場合は、FormDataをオブジェクト/JSON形式に変換
+                formData.forEach((value, key) => {
+                    bodyObj[key] = value;
+                });
+            } else {
+                // GETの場合は、URLのクエリパラメータ（?q=xxx）としてURLの後ろにくっつける
+                const params = new URLSearchParams(formData).toString();
+                if (params) {
+                    // すでに?が含まれているかをチェックして結合
+                    const separator = actionUrl.includes('?') ? '&' : '?';
+                    document.getElementById('url').value = actionUrl + separator + params;
+                } else {
+                    document.getElementById('url').value = actionUrl;
+                }
+            }
+
+            // 親画面（この画面）の入力欄にセットして、プロキシ経由で再検索を実行
+            if (method === 'POST') {
+                document.getElementById('url').value = actionUrl;
+                document.getElementById('body').value = JSON.stringify(bodyObj, null, 2);
+            } else {
+                // GETの場合は、bodyは空にする
+                document.getElementById('body').value = '';
+            }
+            
+            document.getElementById('method').value = method;
+
+            // プロキシ送信関数を実行
+            sendViaProxy();
+        });
+    });
+};
+// --- 👆 ここまで ---
         } catch (error) {
             statusCodeEl.textContent = "Status: Error";
             statusCodeEl.style.background = '#dc3545';
