@@ -56,9 +56,14 @@ app.post('/proxy', async (req, res) => {
                         timeout: 3000, // 3秒でタイムアウト
                         headers: headers || {} 
                     }).then(cssRes => {
-                        // 読み込めたら、<link>タグを<style>タグに置き換える
-                        $(el).replaceWith(`<style>/* Inline CSS from ${href} */\n${cssRes.data}</style>`);
-                    }).catch(err => {
+    // 👇 [修正] 読み込んだCSSテキスト内のurl()を絶対パスに書き換える
+    const cleanedCss = rewriteCssUrls(cssRes.data, absoluteCssUrl);
+    
+    // 置き換える
+    $(el).replaceWith(`<style>/* Inline CSS from ${href} */\n${cleanedCss}</style>`);
+})
+                        
+                        .catch(err => {
                         console.error(`CSS fetch失敗: ${absoluteCssUrl}`, err.message);
                         // 失敗した場合は、ブラウザ側に解決させるため絶対パスのhrefに書き換えておく
                         $(el).attr('href', absoluteCssUrl);
@@ -166,6 +171,12 @@ await Promise.all(jsPromises);
             // 既存のsrc属性（imgタグなど）の絶対URL化処理
     // 【server.js の [src] 処理部分を以下に修正】
 
+$('style').each((_, el) => {
+    const rawCss = $(el).text();
+    const rewrittenCss = rewriteCssUrls(rawCss, targetUrl);
+    $(el).text(rewrittenCss);
+});
+            
 $('[src]').each((_, el) => {
     const src = $(el).attr('src');
     if (!src) return;
