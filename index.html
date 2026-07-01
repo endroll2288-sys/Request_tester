@@ -188,7 +188,7 @@ function handleImageError(imgElement) {
     imgElement.style.cursor = 'pointer';
     
     // 代替の画像として、文字（🔃）をSVG画像化したものを一時的にsrcにセット
-    imgElement.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='50' height='50' viewBox='0 0 24 24'><text x='50%' y='55%' font-size='16' text-anchor='middle' dominant-baseline='middle'>🔃</text></svg>";
+    imgElement.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='50' height='50' viewBox='0 0 24 24'><text x='50%' y='55%' font-size='16' text-anchor='middle' dominant-baseline='middle'>↻</text></svg>";
     imgElement.title = "クリックしてサーバー経由で画像を再読み込み";
 
     // 🔃マークをクリックしたときのイベントを仕込む
