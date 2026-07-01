@@ -52,8 +52,11 @@
 <div class="workspace">
     <div class="panel left-panel">
         <h3>Target URL</h3>
-        <div class="input-group">
-            <select id="method">
+       <div class="input-group">
+    <button id="backBtn" onclick="goBack()" style="width: 45px; padding: 10px; background: #6c757d;" disabled>←</button>
+    <button id="forwardBtn" onclick="goForward()" style="width: 45px; padding: 10px; background: #6c757d;" disabled>→</button>
+    
+    <select id="method">
                 <option value="GET" selected>GET</option>
                 <option value="POST">POST</option>
             </select>
