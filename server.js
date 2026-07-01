@@ -102,6 +102,48 @@ $('[href]').each((_, el) => {
     } catch (e) {}
 });
 
+
+
+
+            
+// --- 👇 [新規追加] JSの追加fetch & インライン化処理 ---
+const jsPromises = [];
+
+$('script[src]').each((_, el) => {
+    const src = $(el).attr('src');
+    if (!src) return;
+
+    // 外部のプラグイン（Google Analytics、SNSシェアボタン、広告など）は除外
+    // これらをインライン化するとエラーや動作遅延の原因になります
+    if (src.includes('google') || src.includes('facebook') || src.includes('twitter') || src.includes('analytics')) {
+        return;
+    }
+
+    try {
+        // JSの絶対URLを計算
+        const absoluteJsUrl = new URL(src.trim(), targetUrl).href;
+        
+        // 非同期でJSを取得
+        const fetchJs = axios.get(absoluteJsUrl, { 
+            timeout: 3000, // 3秒でタイムアウト
+            headers: headers || {} 
+        }).then(jsRes => {
+            // 読み込めたら、src属性を消して、タグの中にJSのコードを直接埋め込む
+            $(el).removeAttr('src');
+            $(el).text(`/* Inline JS from ${src} */\n${jsRes.data}`);
+        }).catch(err => {
+            console.error(`JS fetch失敗: ${absoluteJsUrl}`, err.message);
+            // 失敗した場合は、ブラウザ側に解決させるため絶対パスのsrcにしておく
+            $(el).attr('src', absoluteJsUrl);
+        });
+        
+        jsPromises.push(fetchJs);
+    } catch (e) { /* URLパースエラー時はスルー */ }
+});
+
+// CSSのPromise配列と一緒に待つか、ここで個別に待つ
+await Promise.all(jsPromises);
+// --- 👆 ここまで ---
             // 既存のsrc属性（imgタグなど）の絶対URL化処理
     // 【server.js の [src] 処理部分を以下に修正】
 
