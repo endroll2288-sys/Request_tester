@@ -100,6 +100,12 @@
 </div>
 
 <script>
+
+
+    // --- 👇 [新規追加] 履歴管理用の配列とポインタ ---
+let historyStack = [];
+let currentHistoryIndex = -1;
+let isNavigatingHistory = false; // 戻る/進むボタンによる遷移かどうかを判定するフラグ
     // タブ切り替えロジック
     function switchTab(tabName) {
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -163,6 +169,21 @@ bodyEl.textContent = htmlContent;
 
 // 重要：安全なiframeにHTMLを流し込む
 previewFrame.srcdoc = htmlContent;
+
+    // --- 👇 [新規追加] 履歴の追加とボタンの有効/無効化 ---
+if (!isNavigatingHistory) {
+    // 新しいページを開いた場合、現在地より先の進む履歴を削除して新しいURLを追加
+    historyStack = historyStack.slice(0, currentHistoryIndex + 1);
+    historyStack.push({ url: targetUrl, method: method, body: bodyText });
+    currentHistoryIndex = historyStack.length - 1;
+}
+// フラグをリセット
+isNavigatingHistory = false;
+
+// 戻る・進むボタンの状態を更新
+document.getElementById('backBtn').disabled = (currentHistoryIndex <= 0);
+document.getElementById('forwardBtn').disabled = (currentHistoryIndex >= historyStack.length - 1);
+// --- 👆 ここまで ---
 
 // --- 👇 [新規追加] iframe内のフォーム送信を横取りする処理 ---
 // srcdocの読み込み完了を待ってからイベントを設定する
@@ -262,6 +283,32 @@ function handleImageError(imgElement) {
         this.onclick = null; // イベントを解除
     };
 }
+
+    // 戻る・進むの実行関数 
+function goBack() {
+    if (currentHistoryIndex > 0) {
+        currentHistoryIndex--;
+        isNavigatingHistory = true;
+        loadHistory(historyStack[currentHistoryIndex]);
+    }
+}
+
+function goForward() {
+    if (currentHistoryIndex < historyStack.length - 1) {
+        currentHistoryIndex++;
+        isNavigatingHistory = true;
+        loadHistory(historyStack[currentHistoryIndex]);
+    }
+}
+
+// 履歴からデータを復元してリクエストする共通関数
+function loadHistory(historyItem) {
+    document.getElementById('url').value = historyItem.url;
+    document.getElementById('method').value = historyItem.method;
+    document.getElementById('body').value = historyItem.body || '';
+    sendViaProxy();
+}
+
 </script>
 
 </body>
