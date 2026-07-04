@@ -200,6 +200,24 @@ app.post('/proxy', async (req, res) => {
                 $(el).attr('srcset', rewrittenSrcset);
             });
 
+            // --- 
+$('head').prepend(`
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+            // 親画面と同じドメインにある sw.js を、このiframeのスコープとして登録
+            navigator.serviceWorker.register('/sw.js', { scope: './' })
+            .then(function(reg) {
+                console.log('Service Worker 登録成功:', reg.scope);
+            }).catch(function(err) {
+                console.error('Service Worker 登録失敗:', err);
+            });
+        });
+    }
+</script>
+`);
+// ---
+
             // 8. 通常の [src] 属性（imgなど）の絶対パス化 ＆ 画像プロキシエラーハンドラ仕込み
             $('[src]').each((_, el) => {
                 const src = $(el).attr('src');
@@ -308,6 +326,13 @@ app.get('/proxy-media', async (req, res) => {
         }
     }
 });
+
+// server.js に追加
+app.get('/sw.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.sendFile(path.join(__dirname, 'sw.js'));
+});
+
 
 app.listen(PORT, () => {
     console.log(`Proxy Server running at http://localhost:${PORT}`);
