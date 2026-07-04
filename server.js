@@ -117,27 +117,27 @@ app.post('/proxy', async (req, res) => {
             });
 
             // 4. [href] 属性のプロキシ化・絶対URL化
-            $('[href]').each((_, el) => {
-                const href = $(el).attr('href');
-                if (!href) return;
+ // --- server.js の手順4の部分を確認・修正 ---
+$('[href]').each((_, el) => {
+    const href = $(el).attr('href');
+    if (!href) return;
 
-                const trimmedHref = href.trim();
-                if (trimmedHref.startsWith('#') || trimmedHref.startsWith('javascript:')) return;
-                if (el.name === 'link' && $(el).attr('rel') === 'stylesheet') return; 
+    const trimmedHref = href.trim();
+    if (trimmedHref.startsWith('#') || trimmedHref.startsWith('javascript:')) return;
+    if (el.name === 'link' && $(el).attr('rel') === 'stylesheet') return; 
 
-                try {
-                    const absoluteUrl = new URL(trimmedHref, targetUrl).href;
-                    // --- server.js 内の手順4の書き換え処理を以下に変更 ---
-if (el.name === 'a') {
-    const escapedUrl = absoluteUrl.replace(/'/g, "\\'");
-    // 親へ向けて「navigate」というイベントデータを送信するコードに変更
-    $(el).attr('href', `javascript:window.parent.postMessage({type: 'navigate', url: '${escapedUrl}'}, '*'); void(0);`);
-    $(el).removeAttr('target'); 
-} else {
-                        $(el).attr('href', absoluteUrl);
-                    }
-                } catch (e) {}
-            });
+    try {
+        const absoluteUrl = new URL(trimmedHref, targetUrl).href;
+        if (el.name === 'a') {
+            const escapedUrl = absoluteUrl.replace(/'/g, "\\'");
+            // 💡 ここが正しく postMessage に書き換わっているか確認！
+            $(el).attr('href', `javascript:window.parent.postMessage({type: 'navigate', url: '${escapedUrl}'}, '*'); void(0);`);
+            $(el).removeAttr('target'); 
+        } else {
+            $(el).attr('href', absoluteUrl);
+        }
+    } catch (e) {}
+});
 
             // 5. 💡 [修正] 動画・音声タグを「サーバーの動画プロキシ経由」に書き換え
             $('video, audio, source, track, embed, object').each((_, el) => {
