@@ -3,36 +3,34 @@
 self.addEventListener('install', (event) => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
+// --- sw.js の内部を修正 ---
 self.addEventListener('fetch', (event) => {
     const requestUrl = event.request.url;
 
-    // 自身のプロキシサーバーへの通信は無限ループになるのでスルー
     if (requestUrl.startsWith(self.location.origin)) return;
 
-    // GETリクエストのみを対象にする
     if (event.request.method === 'GET') {
         const destination = event.request.destination;
-        let proxyEndpoint = '/proxy-media'; // 基本はメディア・その他用プロキシ
+        let proxyEndpoint = '/proxy-media'; // デフォルト（動画・音声・その他アセット用）
 
         if (destination === 'image') {
-            // 画像は専用プロキシへ
             proxyEndpoint = '/proxy-image';
         } else if (destination === 'script' || destination === 'style' || destination === '') {
-            // JS、CSS、およびフロントからのfetch/XHR通信(destinationが空文字)の場合
-            // ※server.jsの /proxy-media がStream形式でAPI通信を壊す場合は、
-            //  通常のテキスト/JSONを返す軽量な「/proxy-fetch」等をserver.js側に別途作るのが理想です
-            proxyEndpoint = '/proxy-media'; 
+            // 💡 改良: 新設した軽量プロキシを指定
+            proxyEndpoint = '/proxy-fetch'; 
         }
 
         const proxyUrl = `${self.location.origin}${proxyEndpoint}?url=${encodeURIComponent(requestUrl)}`;
         
+        // 💡 改良: headersオブジェクトを新しく安全に複製（セキュリティエラー対策）
+        const newHeaders = new Headers(event.request.headers);
+        
         event.respondWith(
             fetch(proxyUrl, {
-                headers: event.request.headers
+                method: 'GET',
+                headers: newHeaders,
+                credentials: 'omit' // サンドボックス内でのクッキー競合を避ける設定
             })
         );
     }
-    
-    //  メモ: POSTリクエストなどの場合は、現時点ではそのままスルーされます。
-    // 将来的にformのPOSTやAPIのPOSTをデバッグしたい場合は、ここにロジックを追加します。
 });
