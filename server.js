@@ -127,11 +127,13 @@ app.post('/proxy', async (req, res) => {
 
                 try {
                     const absoluteUrl = new URL(trimmedHref, targetUrl).href;
-                    if (el.name === 'a') {
-                        const escapedUrl = absoluteUrl.replace(/'/g, "\\'");
-                        $(el).attr('href', `javascript:window.parent.document.getElementById('url').value='${escapedUrl}'; window.parent.document.getElementById('method').value='GET'; window.parent.sendViaProxy(); void(0);`);
-                        $(el).removeAttr('target'); 
-                    } else {
+                    // --- server.js 内の手順4の書き換え処理を以下に変更 ---
+if (el.name === 'a') {
+    const escapedUrl = absoluteUrl.replace(/'/g, "\\'");
+    // 親へ向けて「navigate」というイベントデータを送信するコードに変更
+    $(el).attr('href', `javascript:window.parent.postMessage({type: 'navigate', url: '${escapedUrl}'}, '*'); void(0);`);
+    $(el).removeAttr('target'); 
+} else {
                         $(el).attr('href', absoluteUrl);
                     }
                 } catch (e) {}
@@ -334,6 +336,37 @@ app.get('/proxy-media', async (req, res) => {
         if (!res.headersSent) {
             res.status(500).send('Failed to stream media');
         }
+    }
+});
+
+
+// --- server.js に追加 ---
+// JavaScript（Fetch/XHR）専用のプロキシエンドポイント
+app.get('/proxy-fetch', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl) return res.status(400).send('URL is required');
+
+    try {
+        const response = await axios({
+            url: targetUrl,
+            method: 'GET',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                // 必要に応じて親から引き継いだヘッダーをここに展開
+            },
+            responseType: 'text', // JSONやテキストを安全に受けるためにtext型に指定
+            validateStatus: () => true
+        });
+
+        // ターゲットから返ってきたContent-Typeをそのままブラウザに返す（jsonやjavascriptなど）
+        if (response.headers['content-type']) {
+            res.setHeader('Content-Type', response.headers['content-type']);
+        }
+        res.status(response.status).send(response.data);
+
+    } catch (error) {
+        console.error('Fetch Proxy Error:', error.message);
+        res.status(500).send(`Fetch Proxy Error: ${error.message}`);
     }
 });
 
