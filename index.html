@@ -106,13 +106,13 @@
     let isNavigatingHistory = false; 
 
     // タブ切り替えロジック
-    function switchTab(tabName) {
-        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        
-        event.target.classList.add('active');
-        document.getElementById(`tab-${tabName}`).classList.add('active');
-    }
+function switchTab(e, tabName) { // 引数に e (event) を追加
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    
+    e.target.classList.add('active'); // e.target に変更
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+}
 
     async function sendViaProxy() {
         const method = document.getElementById('method').value;
