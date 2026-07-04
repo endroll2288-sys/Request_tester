@@ -261,6 +261,22 @@ function switchTab(e, tabName) { // 引数に e (event) を追加
         };
     }
 
+    // iframe（子画面）からのメッセージを安全に受信するリスナー
+window.addEventListener('message', (event) => {
+    // 自身のサーバーからのメッセージのみ信頼する
+    if (event.origin !== window.location.origin) return;
+
+    const data = event.data;
+    if (data && data.type === 'navigate') {
+        // 子画面でクリックされたURLを、親画面の入力欄にセットしてプロキシを実行
+        document.getElementById('url').value = data.url;
+        document.getElementById('method').value = 'GET';
+        document.getElementById('body').value = '';
+        
+        // 既存のメイン関数を呼び出す
+        sendViaProxy();
+    }
+});
     // 戻る・進むの実行関数 
     function goBack() {
         if (currentHistoryIndex > 0) {
