@@ -1,27 +1,27 @@
 // sw.js - iframe内の通信をすべて横取りするスクリプト
 
-// サービスワーカーがインストールされたらすぐにアクティブにする
-self.addEventListener('install', (event) => {
-    self.skipWaiting();
-});
+self.addEventListener('install', (event) => self.skipWaiting());
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
 
-self.addEventListener('activate', (event) => {
-    event.waitUntil(self.clients.claim());
-});
-
-// 🔥 ここが核心：iframe内のあらゆるリクエストを横取りする
 self.addEventListener('fetch', (event) => {
     const requestUrl = event.request.url;
 
-    // 自分のサーバー（localhostやonrender.com）宛ての通信は横取りしない（無限ループ防止）
-    if (requestUrl.startsWith(self.location.origin)) {
-        return;
+    // 自身のプロキシサーバーへの通信はスルー
+    if (requestUrl.startsWith(self.location.origin)) return;
+
+    const destination = event.request.destination;
+    let proxyEndpoint = '/proxy-media'; // デフォルト
+
+    if (destination === 'image') {
+        proxyEndpoint = '/proxy-image';
+    } else if (destination === 'script' || destination === 'style') {
+        // スクリプトやCSSも必要に応じて個別プロキシにするか、メインプロキシへ
+        proxyEndpoint = '/proxy'; 
     }
 
-    // 外部への通信（API、画像、JSなど）であれば、すべて自分のサーバーのプロキシ宛てに書き換える
-    // ※今回はGET通信をメインに中継する例です
+    // GETリクエストの転送ロジック
     if (event.request.method === 'GET') {
-        const proxyUrl = `${self.location.origin}/proxy-media?url=${encodeURIComponent(requestUrl)}`;
+        const proxyUrl = `${self.location.origin}${proxyEndpoint}?url=${encodeURIComponent(requestUrl)}`;
         
         event.respondWith(
             fetch(proxyUrl, {
@@ -29,4 +29,5 @@ self.addEventListener('fetch', (event) => {
             })
         );
     }
+    // POSTなどの場合は、Bodyを一度リライティングしてメインプロキシ(/proxy)へ中継するロジックが必要
 });
