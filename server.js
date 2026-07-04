@@ -215,6 +215,16 @@ $('head').prepend(`
         });
     }
 </script>
+<script>
+    // window.location の変更を擬似的にキャッチするためのハック
+    // ページ遷移時や、親への通知用
+    window.addEventListener('DOMContentLoaded', () => {
+        if (window.parent && window.parent.document.getElementById('url')) {
+            // 親の入力欄に現在のURL（プロキシ対象の元URL）を同期させる
+            window.parent.document.getElementById('url').value = window.location.href;
+        }
+    });
+</script>
 `);
 // ---
 
