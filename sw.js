@@ -6,21 +6,24 @@ self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim(
 self.addEventListener('fetch', (event) => {
     const requestUrl = event.request.url;
 
-    // 自身のプロキシサーバーへの通信はスルー
+    // 自身のプロキシサーバーへの通信は無限ループになるのでスルー
     if (requestUrl.startsWith(self.location.origin)) return;
 
-    const destination = event.request.destination;
-    let proxyEndpoint = '/proxy-media'; // デフォルト
-
-    if (destination === 'image') {
-        proxyEndpoint = '/proxy-image';
-    } else if (destination === 'script' || destination === 'style') {
-        // スクリプトやCSSも必要に応じて個別プロキシにするか、メインプロキシへ
-        proxyEndpoint = '/proxy'; 
-    }
-
-    // GETリクエストの転送ロジック
+    // GETリクエストのみを対象にする
     if (event.request.method === 'GET') {
+        const destination = event.request.destination;
+        let proxyEndpoint = '/proxy-media'; // 基本はメディア・その他用プロキシ
+
+        if (destination === 'image') {
+            // 画像は専用プロキシへ
+            proxyEndpoint = '/proxy-image';
+        } else if (destination === 'script' || destination === 'style' || destination === '') {
+            // JS、CSS、およびフロントからのfetch/XHR通信(destinationが空文字)の場合
+            // ※server.jsの /proxy-media がStream形式でAPI通信を壊す場合は、
+            //  通常のテキスト/JSONを返す軽量な「/proxy-fetch」等をserver.js側に別途作るのが理想です
+            proxyEndpoint = '/proxy-media'; 
+        }
+
         const proxyUrl = `${self.location.origin}${proxyEndpoint}?url=${encodeURIComponent(requestUrl)}`;
         
         event.respondWith(
@@ -29,5 +32,7 @@ self.addEventListener('fetch', (event) => {
             })
         );
     }
-    // POSTなどの場合は、Bodyを一度リライティングしてメインプロキシ(/proxy)へ中継するロジックが必要
+    
+    //  メモ: POSTリクエストなどの場合は、現時点ではそのままスルーされます。
+    // 将来的にformのPOSTやAPIのPOSTをデバッグしたい場合は、ここにロジックを追加します。
 });
