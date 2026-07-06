@@ -370,6 +370,33 @@ app.get('/proxy-fetch', async (req, res) => {
     }
 });
 
+// --- server.js に追加 ---
+// iframeの src に直接指定するためのHTML配信用プロキシ
+app.get('/proxy-html', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl) return res.status(400).send('URL is required');
+
+    try {
+        // 既存の /proxy で行っている axios の通信と Cheerio の書き換えロジックを
+        // ここでそのまま実行します（※既存のロジックを流用してください）
+        
+        // --- 簡易的な流れ（既存のHTML書き換えロジックを通す） ---
+        const response = await axios.get(targetUrl, { responseType: 'text' });
+        let responseData = response.data;
+        
+        // (ここにCheerioを使った1〜8の書き換え処理、<head>へのスクリプト挿入を入れる)
+        // ...既存のコードをそのままここに移植...
+
+        // 最終的なHTMLを「json」ではなく「html」として直接返す
+        res.setHeader('Content-Type', 'text/html');
+        res.send(responseData);
+
+    } catch (error) {
+        res.status(500).send(`HTML Proxy Error: ${error.message}`);
+    }
+});
+
+
 // server.js に追加
 app.get('/sw.js', (req, res) => {
     res.setHeader('Content-Type', 'application/javascript');
