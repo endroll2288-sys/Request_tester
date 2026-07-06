@@ -373,226 +373,127 @@ app.get('/proxy-fetch', async (req, res) => {
 // --- server.js に追加 ---
 // iframeの src に直接指定するためのHTML配信用プロキシ
 // --- server.js に追加・上書き ---
+// --- server.js の /proxy-html を検索エンジン対応版に上書き ---
 app.get('/proxy-html', async (req, res) => {
-    const targetUrl = req.query.url;
+    let targetUrl = req.query.url;
     if (!targetUrl) return res.status(400).send('URL is required');
+
+    // HTTPやHTTPSが抜けている場合の自動補完 (例: google.com -> https://google.com)
+    if (!/^https?:\/\//i.test(targetUrl)) {
+        targetUrl = 'https://' + targetUrl;
+    }
 
     try {
         const response = await axios({
             url: targetUrl,
             method: 'GET',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'ja,en-US;q=0.9,en;q=0.8'
             },
             responseType: 'text',
-            validateStatus: () => true
+            maxRedirects: 5, // 💡 自動でリダイレクト（画面切り替え）を追いかける
+            validateStatus: (status) => status >= 200 && status < 400 // 302なども許容する
         });
 
+        // 💡 実際に最終到達したURL（リダイレクト後）を基準URLにする
+        const finalTargetUrl = response.config.url || targetUrl;
         let responseData = response.data;
-        const contentType = response.headers['content-type'] || '';
 
-        if (contentType.includes('text/html') && typeof responseData === 'string') {
+        // もしレスポンスがHTMLじゃなかったら（画像やJSONが直接降ってきた場合）
+        const contentType = response.headers['content-type'] || '';
+        if (!contentType.includes('text/html')) {
+            // そのままデータを横流しする
+            if (contentType) res.setHeader('Content-Type', contentType);
+            return res.send(responseData);
+        }
+
+        if (typeof responseData === 'string') {
             const $ = cheerio.load(responseData);
 
-            // 💡 [超重要] CSSの崩れを防ぐ究極の対策: <base> タグをheadの先頭に強制注入
-            // これにより、CSSや画像、JS内のすべての相対パスの基準がターゲットサイトのURLになります。
-            $('head').prepend(`<base href="${targetUrl}">`);
-            
-            // 1. CSSのフェッチ & インライン化 & url()絶対パス化
+            // 💡 基準URLを最終到達URLに設定
+            $('head').prepend(`<base href="${finalTargetUrl}">`);
+
+            // 【超重要】GoogleやDuckDuckGoのセキュリティ制限（CSP）を無効化する
+            $('meta[http-equiv="Content-Security-Policy"]').remove();
+            $('meta[http-equiv="content-security-policy"]').remove();
+
+            // 1. CSSのフェッチ & インライン化
             const cssPromises = [];
             $('link[rel="stylesheet"]').each((_, el) => {
                 const href = $(el).attr('href');
                 if (!href) return;
-
                 try {
-                    const absoluteCssUrl = new URL(href.trim(), targetUrl).href;
+                    const absoluteCssUrl = new URL(href.trim(), finalTargetUrl).href;
                     const fetchCss = axios.get(absoluteCssUrl, { 
                         timeout: 3000,
-                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+                        headers: { 'User-Agent': 'Mozilla/5.0' }
                     }).then(cssRes => {
                         const cleanedCss = rewriteCssUrls(cssRes.data, absoluteCssUrl);
-                        $(el).replaceWith(`<style>/* Inline CSS from ${href} */\n${cleanedCss}</style>`);
-                    }).catch(err => {
-                        console.error(`CSS fetch失敗: ${absoluteCssUrl}`, err.message);
-                        // フェッチに失敗した場合は、せめて絶対URLにしてフォールバック
+                        $(el).replaceWith(`<style>${cleanedCss}</style>`);
+                    }).catch(() => {
                         $(el).attr('href', absoluteCssUrl);
                     });
-                    
                     cssPromises.push(fetchCss);
                 } catch (e) {}
             });
             await Promise.all(cssPromises);
 
-            // 2. JavaScriptのフェッチ & インライン化
-            const jsPromises = [];
-            $('script[src]').each((_, el) => {
-                const src = $(el).attr('src');
-                if (!src) return;
-
-                if (src.includes('google') || src.includes('facebook') || src.includes('twitter') || src.includes('analytics')) {
-                    return;
-                }
-
-                try {
-                    const absoluteJsUrl = new URL(src.trim(), targetUrl).href;
-                    const fetchJs = axios.get(absoluteJsUrl, { 
-                        timeout: 3000,
-                        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-                    }).then(jsRes => {
-                        $(el).removeAttr('src');
-                        $(el).text(`/* Inline JS from ${src} */\n${jsRes.data}`);
-                    }).catch(err => {
-                        console.error(`JS fetch失敗: ${absoluteJsUrl}`, err.message);
-                        $(el).attr('src', absoluteJsUrl);
-                    });
-                    
-                    jsPromises.push(fetchJs);
-                } catch (e) {}
-            });
-            await Promise.all(jsPromises);
-
-            // 3. HTML内の直書き <style> タグの url() も絶対パス化
-            $('style').each((_, el) => {
-                const rawCss = $(el).text();
-                const rewrittenCss = rewriteCssUrls(rawCss, targetUrl);
-                $(el).text(rewrittenCss);
-            });
-
-            // 4. [href] 属性のプロキシ化・絶対URL化
+            // 2. [href] の書き換え（検索結果のリンクをクリックしたときの対策）
             $('[href]').each((_, el) => {
                 const href = $(el).attr('href');
                 if (!href) return;
 
                 const trimmedHref = href.trim();
                 if (trimmedHref.startsWith('#') || trimmedHref.startsWith('javascript:')) return;
-                if (el.name === 'link' && $(el).attr('rel') === 'stylesheet') return; 
+                if (el.name === 'link' && $(el).attr('rel') === 'stylesheet') return;
 
                 try {
-                    const absoluteUrl = new URL(trimmedHref, targetUrl).href;
+                    const absoluteUrl = new URL(trimmedHref, finalTargetUrl).href;
                     if (el.name === 'a') {
                         const escapedUrl = absoluteUrl.replace(/'/g, "\\'");
+                        // 親のウィンドウへ移動を通知
                         $(el).attr('href', `javascript:window.parent.postMessage({type: 'navigate', url: '${escapedUrl}'}, '*'); void(0);`);
-                        $(el).removeAttr('target'); 
+                        $(el).removeAttr('target');
                     } else {
                         $(el).attr('href', absoluteUrl);
                     }
                 } catch (e) {}
             });
 
-            // 5. 動画・音声タグをストリーミングプロキシに書き換え
-            $('video, audio, source, track, embed, object').each((_, el) => {
-                const attributes = ['src', 'poster', 'data'];
-                attributes.forEach(attr => {
-                    const value = $(el).attr(attr);
-                    if (!value) return;
-
-                    const trimmedValue = value.trim();
-                    if (trimmedValue.startsWith('data:')) return;
-
-                    try {
-                        const absoluteUrl = new URL(trimmedValue, targetUrl).href;
-                        if (attr === 'poster') {
-                            $(el).attr(attr, `/proxy-image?url=${encodeURIComponent(absoluteUrl)}`);
-                        } else {
-                            $(el).attr(attr, `/proxy-media?url=${encodeURIComponent(absoluteUrl)}`);
-                        }
-                    } catch (e) {}
-                });
-            });
-
-            // 6. <form> タグの送信横取り用のデータ属性付与
-            $('form').each((_, el) => {
-                const action = $(el).attr('action') || '';
-                const method = ($(el).attr('method') || 'GET').toUpperCase();
-
-                try {
-                    const absoluteActionUrl = new URL(action.trim(), targetUrl).href;
-                    $(el).attr('action', absoluteActionUrl);
-                    $(el).attr('data-proxy-method', method);
-                    $(el).attr('data-proxy-action', absoluteActionUrl);
-                    $(el).attr('onsubmit', 'return false;');
-                } catch (e) {}
-            });
-
-            // 7. srcset 属性（レスポンシブ画像）の絶対URL化
-            $('[srcset]').each((_, el) => {
-                const srcset = $(el).attr('srcset');
-                if (!srcset) return;
-
-                const rewrittenSrcset = srcset.split(',').map(part => {
-                    const match = part.trim().match(/^(\S+)(.*)$/);
-                    if (!match) return part;
-
-                    const urlPath = match[1];
-                    const descriptor = match[2];
-
-                    if (urlPath.startsWith('http://') || urlPath.startsWith('https://') || urlPath.startsWith('//') || urlPath.startsWith('data:')) {
-                        return part;
-                    }
-
-                    try {
-                        const absoluteUrl = new URL(urlPath, targetUrl).href;
-                        return `${absoluteUrl}${descriptor}`;
-                    } catch (e) {
-                        return part;
-                    }
-                }).join(', ');
-
-                $(el).attr('srcset', rewrittenSrcset);
-            });
-
-            // 💡 Service Worker登録スクリプトの注入
+            // 3. Service Workerの登録スクリプト
             $('head').prepend(`
             <script>
                 if ('serviceWorker' in navigator) {
-                    window.addEventListener('load', function() {
-                        navigator.serviceWorker.register('/sw.js', { scope: './' })
-                        .then(function(reg) {
-                            console.log('Service Worker 登録成功:', reg.scope);
-                        }).catch(function(err) {
-                            console.error('Service Worker 登録失敗:', err);
-                        });
-                    });
+                    navigator.serviceWorker.register('/sw.js', { scope: './' });
                 }
             </script>
             `);
 
-            // 8. 通常の [src] 属性の絶対パス化
+            // 4. その他の [src] を絶対URL化
             $('[src]').each((_, el) => {
                 const src = $(el).attr('src');
                 if (!src) return;
-
-                const trimmedSrc = src.trim();
-                if (trimmedSrc.startsWith('#') || trimmedSrc.startsWith('javascript:')) return;
-
-                const parentName = el.name;
-                if (['video', 'audio', 'source', 'track', 'embed', 'object'].includes(parentName)) return;
-
                 try {
-                    const absoluteUrl = (!trimmedSrc.startsWith('http://') && !trimmedSrc.startsWith('https://') && !trimmedSrc.startsWith('//') && !trimmedSrc.startsWith('data:'))
-                        ? new URL(trimmedSrc, targetUrl).href
-                        : trimmedSrc;
-
+                    const absoluteUrl = new URL(src.trim(), finalTargetUrl).href;
                     $(el).attr('src', absoluteUrl);
-                    
-                    if (el.name === 'img') {
-                        $(el).attr('data-original-src', absoluteUrl);
-                        $(el).attr('onerror', 'window.parent.handleImageError(this)');
-                    }
                 } catch (e) {}
             });
 
             responseData = $.html();
         }
 
-        // HTMLとして直接ブラウザ（iframe）に返却
+        // セキュリティヘッダーをあなた自身のサーバー側で削除してブラウザに返す
+        res.removeHeader('Content-Security-Policy');
+        res.removeHeader('X-Frame-Options'); // iframe内での表示を許可させる
+        
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(responseData);
 
     } catch (error) {
-        console.error('HTML Proxy Error:', error.message);
-        res.status(500).send(`HTML Proxy Error: ${error.message}`);
+        console.error('Search Proxy Error:', error.message);
+        res.status(500).send(`Search Proxy Error: ${error.message}`);
     }
 });
 
