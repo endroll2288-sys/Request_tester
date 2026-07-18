@@ -362,7 +362,7 @@ $('head').prepend(`
     (function() {
         const base = '${finalTargetUrl}';
 
-        // 1. 本物の fetch をラップして、相対パスを自動的に 4Gamer の絶対パスに修正
+       
         const originalFetch = window.fetch;
         window.fetch = function(input, init) {
             if (typeof input === 'string' && !input.startsWith('http') && !input.startsWith('//')) {
@@ -371,7 +371,7 @@ $('head').prepend(`
             return originalFetch(input, init);
         };
 
-        // 2. XMLHttpRequest (Ajax) も同様にフック
+       
         const originalOpen = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function(method, url, ...args) {
             if (typeof url === 'string' && !url.startsWith('http') && !url.startsWith('//')) {
@@ -380,7 +380,7 @@ $('head').prepend(`
             return originalOpen.apply(this, [method, url, ...args]);
         };
 
-        // 3. 画面に後から追加される <script> や <img> のsrcも強制的に絶対パス化
+        
         const originalAppendChild = Element.prototype.appendChild;
         Element.prototype.appendChild = function(element) {
             if (element && (element.tagName === 'SCRIPT' || element.tagName === 'IMG')) {
