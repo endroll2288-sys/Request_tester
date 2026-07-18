@@ -30,7 +30,7 @@
         button { background: var(--primary); color: white; border: none; padding: 12px; font-size: 1rem; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; }
         button:hover { opacity: 0.9; }
         
-        /* タブ切り替え（コード vs プレビュー） */
+        /* タブ切り替え */
         .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 10px; }
         .tab { padding: 8px 16px; cursor: pointer; border: none; background: none; font-weight: bold; color: #666; }
         .tab.active { color: var(--primary); border-bottom: 2px solid var(--primary); margin-bottom: -2px; }
@@ -80,9 +80,10 @@
         </div>
         
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('preview')">HTML Preview</button>
-            <button class="tab" onclick="switchTab('code')">Raw Response</button>
-            <button class="tab" onclick="switchTab('headers-tab')">Headers</button>
+            <!-- HTML側の引数に this を追加して要素自体を渡すように変更 -->
+            <button class="tab active" onclick="switchTab(this, 'preview')">HTML Preview</button>
+            <button class="tab" onclick="switchTab(this, 'code')">Raw Response</button>
+            <button class="tab" onclick="switchTab(this, 'headers-tab')">Headers</button>
         </div>
 
         <div id="tab-preview" class="tab-content active">
@@ -105,105 +106,123 @@
     let currentHistoryIndex = -1;
     let isNavigatingHistory = false; 
 
-    // タブ切り替えロジック
-function switchTab(e, tabName) { // 引数に e (event) を追加
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    
-    e.target.classList.add('active'); // e.target に変更
-    document.getElementById(`tab-${tabName}`).classList.add('active');
-}
-
- async function sendViaProxy() {
-    const method = document.getElementById('method').value;
-    const targetUrl = document.getElementById('url').value;
-    const headersText = document.getElementById('headers').value;
-    const bodyText = document.getElementById('body').value;
-
-    const statusCodeEl = document.getElementById('statusCode');
-    const previewFrame = document.getElementById('previewFrame');
-
-    statusCodeEl.textContent = 'Status: Fetching...';
-    statusCodeEl.style.background = '#007bff';
-
-    // JSONフォーマットバリデーション（チェック機能だけ残す）
-    try {
-        if (headersText.trim()) JSON.parse(headersText);
-        if (bodyText.trim() && method !== 'GET') {
-            try { JSON.parse(bodyText); } catch { /* text形式を許容 */ }
-        }
-    } catch (e) {
-        alert("JSONフォーマットエラーです。末尾のカンマなどを確認してください:\n" + e.message);
-        return;
+    // タブ切り替えロジックのバグを修正 (第1引数をクリックされたボタン要素そのものにする)
+    function switchTab(element, tabName) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        
+        element.classList.add('active'); 
+        document.getElementById(`tab-${tabName}`).classList.add('active');
     }
 
-    // 💡 読み込み完了（onload）イベントをセット（フォーム横取り等の処理）
-    previewFrame.onload = function() {
-        const iframeDoc = previewFrame.contentDocument || previewFrame.contentWindow.document;
-        if (!iframeDoc) return;
+    async function sendViaProxy() {
+        const method = document.getElementById('method').value;
+        const targetUrl = document.getElementById('url').value;
+        const headersText = document.getElementById('headers').value;
+        const bodyText = document.getElementById('body').value;
 
-        // iframe内のすべてのフォームを横取り対象にする
-        iframeDoc.querySelectorAll('form').forEach(form => {
-            form.onsubmit = null; 
-            form.addEventListener('submit', function(event) {
-                event.preventDefault();
+        const statusCodeEl = document.getElementById('statusCode');
+        const previewFrame = document.getElementById('previewFrame');
+        const responseBodyEl = document.getElementById('responseBody');
+        const responseHeadersEl = document.getElementById('responseHeaders');
 
-                const actionUrl = form.getAttribute('data-proxy-action') || form.action;
-                const method = (form.getAttribute('data-proxy-method') || form.method || 'GET').toUpperCase();
-                const formData = new FormData(form);
-                let bodyObj = {};
-                
-                if (method === 'POST') {
-                    formData.forEach((value, key) => { bodyObj[key] = value; });
-                } else {
-                    const params = new URLSearchParams(formData).toString();
-                    const separator = actionUrl.includes('?') ? '&' : '?';
-                    document.getElementById('url').value = params ? (actionUrl + separator + params) : actionUrl;
-                }
+        statusCodeEl.textContent = 'Status: Fetching...';
+        statusCodeEl.style.background = '#007bff';
 
-                if (method === 'POST') {
-                    document.getElementById('url').value = actionUrl;
-                    document.getElementById('body').value = JSON.stringify(bodyObj, null, 2);
-                } else {
-                    document.getElementById('body').value = '';
-                }
-                
-                document.getElementById('method').value = method;
-                sendViaProxy();
+        // JSONフォーマットバリデーション
+        try {
+            if (headersText.trim()) JSON.parse(headersText);
+            if (bodyText.trim() && method !== 'GET') {
+                try { JSON.parse(bodyText); } catch { /* text形式を許容 */ }
+            }
+        } catch (e) {
+            alert("JSONフォーマットエラーです。末尾のカンマなどを確認してください:\n" + e.message);
+            return;
+        }
+
+        // iframeの読み込み完了イベント
+        previewFrame.onload = function() {
+            const iframeDoc = previewFrame.contentDocument || previewFrame.contentWindow.document;
+            if (!iframeDoc) return;
+
+            // iframe内のすべてのフォームを横取り対象にする
+            iframeDoc.querySelectorAll('form').forEach(form => {
+                form.onsubmit = null; 
+                form.addEventListener('submit', function(event) {
+                    event.preventDefault();
+
+                    const actionUrl = form.getAttribute('data-proxy-action') || form.action;
+                    const method = (form.getAttribute('data-proxy-method') || form.method || 'GET').toUpperCase();
+                    const formData = new FormData(form);
+                    let bodyObj = {};
+                    
+                    if (method === 'POST') {
+                        formData.forEach((value, key) => { bodyObj[key] = value; });
+                    } else {
+                        const params = new URLSearchParams(formData).toString();
+                        const separator = actionUrl.includes('?') ? '&' : '?';
+                        document.getElementById('url').value = params ? (actionUrl + separator + params) : actionUrl;
+                    }
+
+                    if (method === 'POST') {
+                        document.getElementById('url').value = actionUrl;
+                        document.getElementById('body').value = JSON.stringify(bodyObj, null, 2);
+                    } else {
+                        document.getElementById('body').value = '';
+                    }
+                    
+                    document.getElementById('method').value = method;
+                    sendViaProxy();
+                });
             });
-        });
 
-        // 💡 ステータス表示を暫定でSuccessにする（iframeの読み込み自体が完了したため）
-        statusCodeEl.textContent = 'Status: Loaded (Proxy)';
-        statusCodeEl.style.background = '#28a745';
+            statusCodeEl.textContent = 'Status: Loaded (Proxy)';
+            statusCodeEl.style.background = '#28a745';
+            previewFrame.contentWindow.focus();
+        };
 
-        // 💡 キーボード操作がすぐ効くように自動フォーカスを当てる
-        previewFrame.contentWindow.focus();
-    };
+        try {
+            const proxyUrl = `/proxy-html?url=${encodeURIComponent(targetUrl)}`;
+            
+            // 1. 先にiframeにプロキシ経由でWebページを表示
+            previewFrame.src = proxyUrl;
 
-    try {
-        // 💡 【超重要】古い fetch() & srcdoc 流し込みをすべて廃止。
-        // 新設する /proxy-html エンドポイントを iframe の src に直接セットする。
-        // これにより、iframe内のドメインが localhost になり Service Worker が効くようになります。
-        previewFrame.src = `/proxy-html?url=${encodeURIComponent(targetUrl)}`;
+            // 2. 💡【新設】「Raw Response」と「Headers」タブの表示用データをバックエンドからこっそり裏取得
+            // これにより、右側の他タブを切り替えた時にもHTMLソースやヘッダーが見えるようになります
+            fetch(proxyUrl)
+                .then(async (res) => {
+                    const text = await res.text();
+                    responseBodyEl.textContent = text;
+                    
+                    // ヘッダー情報の疑似構築（あるいはレスポンスから抽出）
+                    const mockHeaders = {
+                        "Content-Type": res.headers.get("content-type") || "text/html; charset=utf-8",
+                        "X-Proxied-By": "Express-Proxy-Server",
+                        "Target-URL": targetUrl
+                    };
+                    responseHeadersEl.textContent = JSON.stringify(mockHeaders, null, 2);
+                })
+                .catch(err => {
+                    responseBodyEl.textContent = `ソースコードの取得に失敗しました: ${err.message}`;
+                });
 
-        // 履歴の追加とボタンの有効/無効化（既存ロジック）
-        if (!isNavigatingHistory) {
-            historyStack = historyStack.slice(0, currentHistoryIndex + 1);
-            historyStack.push({ url: targetUrl, method: method, body: bodyText });
-            currentHistoryIndex = historyStack.length - 1;
+            // 履歴の追加とボタンの有効/無効化
+            if (!isNavigatingHistory) {
+                historyStack = historyStack.slice(0, currentHistoryIndex + 1);
+                historyStack.push({ url: targetUrl, method: method, body: bodyText });
+                currentHistoryIndex = historyStack.length - 1;
+            }
+            isNavigatingHistory = false;
+
+            document.getElementById('backBtn').disabled = (currentHistoryIndex <= 0);
+            document.getElementById('forwardBtn').disabled = (currentHistoryIndex >= historyStack.length - 1);
+
+        } catch (error) {
+            statusCodeEl.textContent = "Status: Error";
+            statusCodeEl.style.background = '#dc3545';
+            previewFrame.srcdoc = `<p style='color:red;'>Proxy接続エラー: ${error.message}</p>`;
         }
-        isNavigatingHistory = false;
-
-        document.getElementById('backBtn').disabled = (currentHistoryIndex <= 0);
-        document.getElementById('forwardBtn').disabled = (currentHistoryIndex >= historyStack.length - 1);
-
-    } catch (error) {
-        statusCodeEl.textContent = "Status: Error";
-        statusCodeEl.style.background = '#dc3545';
-        previewFrame.srcdoc = `<p style='color:red;'>Proxy接続エラー: ${error.message}</p>`;
     }
-}
 
     // iframe内の画像が読み込みに失敗したときに呼び出される関数
     function handleImageError(imgElement) {
@@ -233,35 +252,30 @@ function switchTab(e, tabName) { // 引数に e (event) を追加
         };
     }
 
-    // iframe（子画面）からのメッセージを安全に受信するリスナー
-// --- index.html に追加 ---
+    // iframe（子画面）およびService Workerからのメッセージ受信リスナー
+    window.addEventListener('message', (event) => {
+        if (event.origin !== window.location.origin) return;
 
-// 1. iframe内部の <a> タグ経由のクリックイベントをキャッチする（既にある場合は上書き）
-window.addEventListener('message', (event) => {
-    if (event.origin !== window.location.origin) return;
-
-    const data = event.data;
-    if (data && data.type === 'navigate') {
-        document.getElementById('url').value = data.url;
-        document.getElementById('method').value = 'GET';
-        document.getElementById('body').value = '';
-        sendViaProxy();
-    }
-});
-
-// 2. Service Worker（sw.js）からの「JSによる画面遷移」をキャッチする
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.addEventListener('message', (event) => {
         const data = event.data;
-        if (data && data.type === 'js-navigate') {
-            // 移動先の外部URLを親画面の入力欄に強制セットし、自ドメインのプロキシで開き直す
+        if (data && data.type === 'navigate') {
             document.getElementById('url').value = data.url;
             document.getElementById('method').value = 'GET';
             document.getElementById('body').value = '';
             sendViaProxy();
         }
     });
-}
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            const data = event.data;
+            if (data && data.type === 'js-navigate') {
+                document.getElementById('url').value = data.url;
+                document.getElementById('method').value = 'GET';
+                document.getElementById('body').value = '';
+                sendViaProxy();
+            }
+        });
+    }
     
     // 戻る・進むの実行関数 
     function goBack() {
