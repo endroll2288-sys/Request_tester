@@ -481,6 +481,86 @@ app.get('/proxy-html', async (req, res) => {
                 } catch (e) {}
             });
 
+
+            // --- server.js の /proxy-html 内、 const $ = cheerio.load(responseData); の直下に挿入 ---
+
+// アクセス先のURLから、ドメイン（例: crazygames.com）を自動抽出
+const targetUrlObj = new URL(finalTargetUrl);
+const targetHostname = targetUrlObj.hostname;
+const targetOrigin = targetUrlObj.origin;
+
+// 💡 【汎用対策1】あらゆるサイトの iframe検知とドメインチェックを完全にダマす
+$('head').prepend(`
+<script>
+    (function() {
+        // 1. iframe脱出（Frame Buster）対策: window.top や parent を自分自身だと思い込ませる
+        try {
+            if (window.top !== window.self) {
+                Object.defineProperty(window, 'top', { get: function() { return window; } });
+                Object.defineProperty(window, 'parent', { get: function() { return window; } });
+            }
+        } catch(e) {}
+
+        // 2. ドメイン偽装: アクセス先のホスト名（${targetHostname}）に強制的に書き換える
+        // ※ 多くのゲームはこの値を見て海賊版サイトかどうかを判定しています
+        const originalLocation = window.location;
+        const fakeLocation = Object.create(originalLocation);
+        
+        Object.defineProperty(fakeLocation, 'hostname', { get: () => '${targetHostname}' });
+        Object.defineProperty(fakeLocation, 'host', { get: () => '${targetHostname}' });
+        Object.defineProperty(fakeLocation, 'origin', { get: () => '${targetOrigin}' });
+        Object.defineProperty(fakeLocation, 'href', { get: () => '${finalTargetUrl}' });
+
+        try {
+            Object.defineProperty(window, 'document', {
+                value: window.document,
+                writable: false,
+                configurable: true
+            });
+            // document.domain の書き換え（古いサイトのセキュリティ対策）
+            Object.defineProperty(window.document, 'domain', { get: () => '${targetHostname}' });
+        } catch(e) {}
+
+        try {
+            // 一部の強固なサイト向けに window.location 自体を上書き試行
+            Object.defineProperty(window, 'location', { get: () => fakeLocation });
+        } catch(e) {}
+    })();
+</script>
+`);
+
+// 💡 【汎用対策2】よくあるゲーム用SDK（広告・海賊版検知API）を片っ端からダミー化してエラー落ちを防ぐ
+$('head').prepend(`
+<script>
+    (function() {
+        // Poki SDK
+        window.PokiSDK = { init: () => Promise.resolve(), startCommercialBreak: (cb) => { if(cb) cb(); }, gameLoadingStart: ()=>{}, gameLoadingProgress: ()=>{}, gameLoadingFinished: ()=>{}, gameplayStart: ()=>{}, gameplayStop: ()=>{} };
+        
+        // CrazyGames SDK
+        window.CrazyGames = { SDK: { game: { gameplayStart: ()=>{}, gameplayStop: ()=>{} }, ad: { requestAd: (t, cb) => { if(cb) cb(); } } } };
+        
+        // GameDistribution (GD) SDK
+        window.gdsdk = { showAd: () => new Promise(resolve => resolve()), preloadAd: () => new Promise(resolve => resolve()) };
+        
+        // Y8 SDK
+        window.ID = { GameAPI: { init: ()=>{}, isReady: ()=>true } };
+    })();
+</script>
+`);
+
+// 💡 【汎用対策3】通信を邪魔する可能性のあるスクリプトの無害化
+$('script').each((_, el) => {
+    const src = $(el).attr('src') || '';
+    
+    // Google Analyticsやよくあるトラッキング、広告ブロック検知を削除
+    // これらが読み込めない（CORS等で弾かれる）と、ゲームのロード自体を止めてしまうサイトがあるため
+    const blockList = ['analytics', 'gtag', 'adsense', 'prebid', 'sentry'];
+    if (blockList.some(keyword => src.includes(keyword))) {
+        $(el).removeAttr('src');
+        $(el).text('/* Blocked Tracking/Ad Script */');
+    }
+});
+
             responseData = $.html();
         }
 
