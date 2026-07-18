@@ -12,10 +12,11 @@ const PORT = 3000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-app.use(express.json());
+// 💡 POST通信を転送できるよう、大容量のJSON/テキスト/バイナリパースを許可
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cors());
 
-// CSS内のurl()を絶対パスに書き換えるヘルパー関数
 function rewriteCssUrls(cssText, baseUrl) {
     return cssText.replace(/url\s*\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, quote, urlPath) => {
         const trimmedUrl = urlPath.trim();
@@ -31,18 +32,16 @@ function rewriteCssUrls(cssText, baseUrl) {
     });
 }
 
-// メイン画面の配信
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// Service Workerファイルの配信
 app.get('/sw.js', (req, res) => {
     res.setHeader('Content-Type', 'application/javascript');
     res.sendFile(path.join(__dirname, 'sw.js'));
 });
 
-// 画像プロキシ用エンドポイント
+// 画像プロキシ
 app.get('/proxy-image', async (req, res) => {
     const imageUrl = req.query.url;
     if (!imageUrl) return res.status(400).send('URL is required');
@@ -53,13 +52,13 @@ app.get('/proxy-image', async (req, res) => {
             method: 'GET',
             responseType: 'arraybuffer',
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': new URL(imageUrl).origin
             },
             validateStatus: () => true
         });
 
-        const contentType = response.headers['content-type'] || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Type', response.headers['content-type'] || 'image/jpeg');
         res.send(response.data);
     } catch (error) {
         console.error('Image Proxy Error:', error.message);
@@ -67,7 +66,7 @@ app.get('/proxy-image', async (req, res) => {
     }
 });
 
-// 動画・音声用のストリーミングプロキシエンドポイント
+// メディアプロキシ
 app.get('/proxy-media', async (req, res) => {
     const mediaUrl = req.query.url;
     if (!mediaUrl) return res.status(400).send('URL is required');
@@ -75,6 +74,7 @@ app.get('/proxy-media', async (req, res) => {
     try {
         const requestHeaders = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': new URL(mediaUrl).origin
         };
         if (req.headers.range) {
             requestHeaders['Range'] = req.headers.range;
@@ -95,43 +95,58 @@ app.get('/proxy-media', async (req, res) => {
         
         res.status(response.status);
         response.data.pipe(res);
-
     } catch (error) {
         console.error('Media Proxy Error:', error.message);
-        if (!res.headersSent) {
-            res.status(500).send('Failed to stream media');
-        }
+        if (!res.headersSent) res.status(500).send('Failed to stream media');
     }
 });
 
-// JavaScript（Fetch/XHR）専用のプロキシエンドポイント
-app.get('/proxy-fetch', async (req, res) => {
+// 💡 【大幅強化】JavaScript、API（Fetch/XHR）、POST通信の共通プロキシ
+// app.all に変更し、GETだけでなくPOSTやPUTもすべて本家サーバーに丸投げできるようにしました
+app.all('/proxy-fetch', async (req, res) => {
     const targetUrl = req.query.url;
     if (!targetUrl) return res.status(400).send('URL is required');
 
     try {
-        const response = await axios({
-            url: targetUrl,
-            method: 'GET',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            },
-            responseType: 'text',
-            validateStatus: () => true
-        });
+        const urlObj = new URL(targetUrl);
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Origin': urlObj.origin,
+            'Referer': urlObj.origin + '/'
+        };
 
-        if (response.headers['content-type']) {
-            res.setHeader('Content-Type', response.headers['content-type']);
+        // 相手サーバーが要求するContent-Typeがあれば引き継ぐ
+        if (req.headers['content-type']) {
+            headers['content-type'] = req.headers['content-type'];
         }
-        res.status(response.status).send(response.data);
 
+        const axiosConfig = {
+            url: targetUrl,
+            method: req.method, // 元のリクエスト(GETやPOST)をそのまま維持
+            headers: headers,
+            responseType: 'arraybuffer', // 💡 JSON、JS、圧縮バイナリ等すべてを壊さず受け取るために必須
+            validateStatus: () => true
+        };
+
+        // POST/PUTの場合は、クライアントから送られてきたBodyをそのまま乗せる
+        if (req.method !== 'GET' && req.method !== 'HEAD') {
+            axiosConfig.data = req.body;
+        }
+
+        const response = await axios(axiosConfig);
+
+        // レスポンスヘッダーの引き継ぎ
+        if (response.headers['content-type']) res.setHeader('Content-Type', response.headers['content-type']);
+        if (response.headers['content-encoding']) res.setHeader('Content-Encoding', response.headers['content-encoding']);
+
+        res.status(response.status).send(response.data);
     } catch (error) {
         console.error('Fetch Proxy Error:', error.message);
         res.status(500).send(`Fetch Proxy Error: ${error.message}`);
     }
 });
 
-// iframeの src に直接指定するためのHTML配信用プロキシ（検索エンジン＆汎用ゲーム対策版）
+// HTML配信プロキシ
 app.get('/proxy-html', async (req, res) => {
     let targetUrl = req.query.url;
     if (!targetUrl) return res.status(400).send('URL is required');
@@ -165,20 +180,18 @@ app.get('/proxy-html', async (req, res) => {
 
         if (typeof responseData === 'string') {
             const $ = cheerio.load(responseData);
-
             const targetUrlObj = new URL(finalTargetUrl);
             const targetHostname = targetUrlObj.hostname;
             const targetOrigin = targetUrlObj.origin;
 
-            // 基準URLを最終到達URLに設定
+            // 基準URLを設定
             $('head').prepend(`<base href="${finalTargetUrl}">`);
 
-            // セキュリティ制限（CSP）メタタグを無効化
+            // CSPメタタグの削除
             $('meta[http-equiv="Content-Security-Policy"]').remove();
             $('meta[http-equiv="content-security-policy"]').remove();
 
-            // 💡 【汎用対策1】あらゆるサイトの iframe検知とドメインチェックを完全にダマす
-            // ※ JavaScript内の変数を正しく解釈させるため、Nodeのバッククォートで保護しています
+            // 💡 iframe検知・ドメインチェック偽装のインジェクション
             $('head').prepend(`
             <script>
                 (function() {
@@ -213,7 +226,7 @@ app.get('/proxy-html', async (req, res) => {
             </script>
             `);
 
-            // 💡 【汎用対策2】よくあるゲーム用SDKをダミー化してエラー落ちを防ぐ
+            // ゲーム用SDKのダミー化
             $('head').prepend(`
             <script>
                 (function() {
@@ -225,7 +238,7 @@ app.get('/proxy-html', async (req, res) => {
             </script>
             `);
 
-            // 💡 【汎用対策3】通信を邪魔する可能性のある追跡スクリプトの無害化
+            // トラッキングスクリプト無害化
             $('script').each((_, el) => {
                 const src = $(el).attr('src') || '';
                 const blockList = ['analytics', 'gtag', 'adsense', 'prebid', 'sentry', 'facebook', 'twitter'];
@@ -235,7 +248,7 @@ app.get('/proxy-html', async (req, res) => {
                 }
             });
 
-            // 1. CSSのフェッチ & インライン化
+            // 1. CSSのインライン化
             const cssPromises = [];
             $('link[rel="stylesheet"]').each((_, el) => {
                 const href = $(el).attr('href');
@@ -260,7 +273,6 @@ app.get('/proxy-html', async (req, res) => {
             $('[href]').each((_, el) => {
                 const href = $(el).attr('href');
                 if (!href) return;
-
                 const trimmedHref = href.trim();
                 if (trimmedHref.startsWith('#') || trimmedHref.startsWith('javascript:')) return;
                 if (el.name === 'link' && $(el).attr('rel') === 'stylesheet') return;
@@ -290,13 +302,12 @@ app.get('/proxy-html', async (req, res) => {
             </script>
             `);
 
-            // 4. その他のメディアタグ（video/audioなど）のストリーミング書き換え
+            // 4. メディアタグのストリーミング書き換え
             $('video, audio, source, track, embed, object').each((_, el) => {
                 const attributes = ['src', 'poster', 'data'];
                 attributes.forEach(attr => {
                     const value = $(el).attr(attr);
                     if (!value) return;
-
                     const trimmedValue = value.trim();
                     if (trimmedValue.startsWith('data:')) return;
 
@@ -311,7 +322,7 @@ app.get('/proxy-html', async (req, res) => {
                 });
             });
 
-            // 5. フォーム送信の横取り設定
+            // 5. フォーム送信の横取り
             $('form').each((_, el) => {
                 const action = $(el).attr('action') || '';
                 const method = ($(el).attr('method') || 'GET').toUpperCase();
@@ -324,16 +335,13 @@ app.get('/proxy-html', async (req, res) => {
                 } catch (e) {}
             });
 
-            // 6. [src] 属性の絶対パス化 (画像やその他アセット)
+            // 6. [src] 属性の絶対パス化
             $('[src]').each((_, el) => {
                 const src = $(el).attr('src');
                 if (!src) return;
-
                 const trimmedSrc = src.trim();
                 if (trimmedSrc.startsWith('#') || trimmedSrc.startsWith('javascript:')) return;
-
-                const parentName = el.name;
-                if (['video', 'audio', 'source', 'track', 'embed', 'object'].includes(parentName)) return;
+                if (['video', 'audio', 'source', 'track', 'embed', 'object'].includes(el.name)) return;
 
                 try {
                     const absoluteUrl = new URL(trimmedSrc, finalTargetUrl).href;
@@ -351,10 +359,8 @@ app.get('/proxy-html', async (req, res) => {
 
         res.removeHeader('Content-Security-Policy');
         res.removeHeader('X-Frame-Options');
-        
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(responseData);
-
     } catch (error) {
         console.error('Search Proxy Error:', error.message);
         res.status(500).send(`Search Proxy Error: ${error.message}`);
