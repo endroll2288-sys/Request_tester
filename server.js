@@ -290,18 +290,20 @@ app.get('/proxy-html', async (req, res) => {
             });
 
             // 3. Service Workerの登録スクリプト
-            $('head').prepend(`
-            <script>
-                if ('serviceWorker' in navigator) {
-                    window.addEventListener('load', function() {
-                        navigator.serviceWorker.register('/sw.js', { scope: './' })
-                        .then(reg => console.log('SW Registered:', reg.scope))
-                        .catch(err => console.error('SW Failed:', err));
-                    });
-                }
-            </script>
-            `);
 
+            $('head').prepend(`
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+           
+            const actualProxyOrigin = window.parent.location.origin; 
+            navigator.serviceWorker.register(actualProxyOrigin + '/sw.js', { scope: './' })
+            .then(reg => console.log('SW Registered successfully:', reg.scope))
+            .catch(err => console.error('SW Failed:', err));
+        });
+    }
+</script>
+`);
             // 4. メディアタグのストリーミング書き換え
             $('video, audio, source, track, embed, object').each((_, el) => {
                 const attributes = ['src', 'poster', 'data'];
