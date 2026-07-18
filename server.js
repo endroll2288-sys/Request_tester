@@ -354,6 +354,47 @@ app.get('/proxy-html', async (req, res) => {
                 } catch (e) {}
             });
 
+            // 💡 【プロキシの最終奥義】
+// JavaScript自体が後から動的に作成する「相対パス」の通信を、ブラウザの根本（window.fetch や XMLHttpRequest）から横取りして絶対パスに強制変換するスクリプト
+
+$('head').prepend(`
+<script>
+    (function() {
+        const base = '${finalTargetUrl}';
+
+        // 1. 本物の fetch をラップして、相対パスを自動的に 4Gamer の絶対パスに修正
+        const originalFetch = window.fetch;
+        window.fetch = function(input, init) {
+            if (typeof input === 'string' && !input.startsWith('http') && !input.startsWith('//')) {
+                input = new URL(input, base).href;
+            }
+            return originalFetch(input, init);
+        };
+
+        // 2. XMLHttpRequest (Ajax) も同様にフック
+        const originalOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url, ...args) {
+            if (typeof url === 'string' && !url.startsWith('http') && !url.startsWith('//')) {
+                url = new URL(url, base).href;
+            }
+            return originalOpen.apply(this, [method, url, ...args]);
+        };
+
+        // 3. 画面に後から追加される <script> や <img> のsrcも強制的に絶対パス化
+        const originalAppendChild = Element.prototype.appendChild;
+        Element.prototype.appendChild = function(element) {
+            if (element && (element.tagName === 'SCRIPT' || element.tagName === 'IMG')) {
+                const src = element.getAttribute('src');
+                if (src && !src.startsWith('http') && !src.startsWith('//')) {
+                    element.setAttribute('src', new URL(src, base).href);
+                }
+            }
+            return originalAppendChild.call(this, element);
+        };
+    })();
+</script>
+`);
+
             responseData = $.html();
         }
 
