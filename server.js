@@ -395,6 +395,79 @@ $('head').prepend(`
 </script>
 `);
 
+            $('head').prepend(`
+<script>
+    (function() {
+        const targetHostname = '${targetHostname}';
+        const targetOrigin = '${targetOrigin}';
+        const finalTargetUrl = '${finalTargetUrl}';
+
+      
+        try {
+            if (window.top !== window.self) {
+                Object.defineProperty(window, 'top', { get: function() { return window; }, configurable: true });
+                Object.defineProperty(window, 'parent', { get: function() { return window; }, configurable: true });
+            }
+        } catch(e) {}
+
+       
+        const originalLocation = window.location;
+        const fakeLocation = new Proxy(originalLocation, {
+            get: function(target, prop) {
+                if (prop === 'hostname' || prop === 'host') return targetHostname;
+                if (prop === 'origin') return targetOrigin;
+                if (prop === 'href') return finalTargetUrl;
+                
+                
+                const value = target[prop];
+                if (typeof value === 'function') {
+                    return value.bind(target);
+                }
+                return value;
+            },
+            set: function(target, prop, value) {
+                
+                if (prop === 'href' || prop === 'hash') {
+                    window.parent.postMessage({type: 'navigate', url: new URL(value, finalTargetUrl).href}, '*');
+                    return true;
+                }
+                target[prop] = value;
+                return true;
+            }
+        });
+
+        try {
+            Object.defineProperty(window, 'location', { get: () => fakeLocation, configurable: true });
+        } catch(e) {
+           
+            window.location.toString = () => finalTargetUrl;
+        }
+
+        try {
+          
+            Object.defineProperty(window.document, 'domain', { get: () => targetHostname, configurable: true });
+        } catch(e) {}
+
+        
+        const originalFetch = window.fetch;
+        window.fetch = function(input, init) {
+            if (typeof input === 'string' && !input.startsWith('http') && !input.startsWith('//') && !input.startsWith('data:')) {
+                input = new URL(input, finalTargetUrl).href;
+            }
+            return originalFetch(input, init);
+        };
+
+        const originalOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url, ...args) {
+            if (typeof url === 'string' && !url.startsWith('http') && !url.startsWith('//') && !url.startsWith('data:')) {
+                url = new URL(url, finalTargetUrl).href;
+            }
+            return originalOpen.apply(this, [method, url, ...args]);
+        };
+    })();
+</script>
+`);
+
             responseData = $.html();
         }
 
